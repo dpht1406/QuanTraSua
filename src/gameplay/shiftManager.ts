@@ -28,6 +28,7 @@ export interface ShiftManager {
   isConfirmingClose(): boolean;
   syncTarget(currentTarget: THREE.Object3D | null): void;
   nextDay(): void;
+  setBeforeShiftEnd(cb: (() => void) | null): void;
 }
 
 // Quản lý vòng đời ca làm việc (08:00-22:00), đóng/mở cửa, thống kê và tổng kết ca
@@ -45,6 +46,7 @@ export function createShiftManager(
   let realElapsedSec = 0;
   let currentMinutes = SHIFT_START_HOUR * 60;
   let confirmingClose = false;
+  let beforeShiftEnd: (() => void) | null = null;
 
   const toast = (message: string) => gameStore.bus.emit('toast:show', { message });
 
@@ -105,6 +107,7 @@ export function createShiftManager(
     });
     onClearHeldCup();
     hooks.onShiftEnded?.();
+    beforeShiftEnd?.();
     gameStore.updateState({
       shiftState: nextState,
       money: settlement.money,
@@ -250,6 +253,10 @@ export function createShiftManager(
         shiftState: nextState,
         shiftStats: createEmptyShiftStats(),
       });
+    },
+
+    setBeforeShiftEnd(cb) {
+      beforeShiftEnd = cb;
     },
   };
 }

@@ -12,6 +12,7 @@ export interface HudController {
   setGreetHint(remainingSec: number | null): void;
   setEventBanner(text: string | null): void;
   setRelockVisible(visible: boolean): void;
+  showHint(text: string, ms?: number): void;
   dispose(): void;
 }
 
@@ -51,7 +52,7 @@ export function createHud(
     <div class="interact-prompt hidden" data-el="prompt"></div>
     <div class="hold-progress hidden" data-el="hold"><div class="hold-fill" data-el="holdFill"></div></div>
     <div class="toast hidden" data-el="toast"></div>
-    <div class="hud-controls">WASD: Đi · Shift: Chạy nhẹ · Chuột: Nhìn · E / Giữ E: Tương tác & Lau · G: Chào · 1/2/3: Chọn · Esc: Tạm dừng</div>
+    <div class="hud-controls">WASD: Đi · Shift: Chạy · Chuột: Nhìn · Chuột trái/phải: Dùng/Lau · F/Q: Thả/Ném · R: Đổ lại · E: Tương tác · G: Chào · 1/2/3: Chọn · Esc: Tạm dừng</div>
   `;
   root.appendChild(layer);
 
@@ -127,6 +128,13 @@ export function createHud(
     }
   };
 
+  const showHint = (text: string, ms = 2400) => {
+    toastEl.textContent = text;
+    toastEl.classList.remove('hidden');
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => toastEl.classList.add('hidden'), ms);
+  };
+
   const unsubState = bus.on('state:changed', renderState);
   const unsubClean = bus.on('cleanlinessChanged', ({ value }) => renderClean(value));
   const unsubRep = bus.on('reputationChanged', ({ value }) => renderRep(value));
@@ -134,12 +142,7 @@ export function createHud(
     latestStock = stock;
     renderStock();
   });
-  const unsubToast = bus.on('toast:show', ({ message }) => {
-    toastEl.textContent = message;
-    toastEl.classList.remove('hidden');
-    window.clearTimeout(toastTimer);
-    toastTimer = window.setTimeout(() => toastEl.classList.add('hidden'), 2400);
-  });
+  const unsubToast = bus.on('toast:show', ({ message }) => showHint(message));
 
   renderState(initialState);
 
@@ -197,6 +200,8 @@ export function createHud(
     setRelockVisible(visible) {
       relockEl.classList.toggle('hidden', !visible);
     },
+
+    showHint,
 
     dispose() {
       unsubState();

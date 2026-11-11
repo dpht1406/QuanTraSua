@@ -1,0 +1,64 @@
+.hands-hud {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.hands-pour-hint {
+  background: #ffe2c2;
+  border: 2px solid #1c1615;
+  border-radius: 9px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #7b4f34;
+  box-shadow: 0 2px 0 #1c1615;
+}
+
+.hands-slots {
+  display: flex;
+  gap: 8px;
+}
+
+.hand-slot {
+  min-width: 168px;
+  max-width: 214px;
+  background: #fff7ee;
+  border: 2.5px solid #1c1615;
+  border-radius: 12px;
+  padding: 6px 10px;
+  box-shadow: 0 3px 0 #1c1615;
+}
+
+.hand-slot.empty {
+  opacity: 0.8;
+  background: #f8efe4;
+}
+
+.hand-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #7b4f34;
+  margin-bottom: 3px;
+}
+
+.hand-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #1c1615;
+}
+
+.hand-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

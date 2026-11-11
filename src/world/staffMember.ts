@@ -2,19 +2,27 @@ import * as THREE from 'three';
 import { resolveAabbMove, type AabbBox } from '../player/collision.ts';
 import type { StaffMember } from '../state/staff.ts';
 import { PALETTE } from '../styles/palette.ts';
+import { createFallAnimation, type FallDir } from './fallAnimation.ts';
 import { makeBox } from './furniture.ts';
+import type { Aabb3D } from './shopWorld.ts';
 
 export interface StaffActor {
   member: StaffMember;
   root: THREE.Group;
+  readonly hitbox: Aabb3D | null;
   moveToward(targetX: number, targetZ: number, dt: number): boolean;
   faceToward(targetX: number, targetZ: number): void;
   animateWork(active: boolean, dt: number): void;
+  triggerFall(dur: number, hitDir?: FallDir): void;
+  updateFall(dt: number): boolean;
+  clearFall(): void;
   resetHome(x: number, z: number): void;
 }
 
 const STAFF_RADIUS = 0.25;
 const ARRIVE_DIST = 0.34;
+const HITBOX_HALF_W = 0.28;
+const HITBOX_HEIGHT = 1.32;
 
 // Tạo nhân vật nhân viên khối đơn giản có viền đen và di chuyển tránh va chạm bằng AABB
 export function createStaffActor(
@@ -50,6 +58,7 @@ export function createStaffActor(
   let animTime = 0;
   let detourTimer = 0;
   let detourSign = 1;
+  const fallAnim = createFallAnimation(root, 1.08);
 
   const faceToward = (tx: number, tz: number) => {
     const dx = tx - root.position.x;
@@ -62,6 +71,10 @@ export function createStaffActor(
   return {
     member,
     root,
+    get hitbox(): Aabb3D | null {
+      if (!root.visible) return null;
+      return fallAnim.getHitbox(root.position.x, root.position.z, HITBOX_HALF_W, HITBOX_HEIGHT);
+    },
     faceToward,
 
     moveToward(targetX, targetZ, dt) {
@@ -125,7 +138,20 @@ export function createStaffActor(
       root.rotation.z = Math.sin(animTime * 6) * 0.08;
     },
 
+    triggerFall(dur, hitDir) {
+      fallAnim.trigger(dur, hitDir, root.rotation.y);
+    },
+
+    updateFall(dt) {
+      return fallAnim.update(dt);
+    },
+
+    clearFall() {
+      fallAnim.reset();
+    },
+
     resetHome(x, z) {
+      fallAnim.reset();
       root.position.set(x, 0, z);
       root.rotation.set(0, 0, 0);
       detourTimer = 0;

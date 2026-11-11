@@ -3,15 +3,16 @@ import type { Interactable } from '../interaction/interactionSystem.ts';
 import type { CleanlinessStore } from '../state/cleanliness.ts';
 import { INVENTORY_CONFIG, TRASH_FULL_CUPS } from '../state/constants.ts';
 import type { EventBus } from '../state/eventBus.ts';
-import type { GameEvents } from '../state/gameState.ts';
-import type { createInventoryStore, InventoryItem } from '../state/inventory.ts';
+import { gameStore, type GameEvents } from '../state/gameState.ts';
 import {
-  DRINK_BASE_LIST,
-  DRINK_LABELS,
-  LEVEL_PERCENT_LIST,
-  TOPPING_LABELS,
-  TOPPING_LIST,
-} from '../state/menu.ts';
+  findCupHand,
+  getHeld,
+  isFull,
+  pickUp,
+  removeFrom,
+  type HandId,
+} from '../state/hands.ts';
+import type { createInventoryStore, InventoryItem } from '../state/inventory.ts';
 import {
   applyCupStep,
   createEmptyCup,
@@ -24,6 +25,8 @@ import type { HeldCupView } from '../ui/heldCup.ts';
 import type { LevelPickerView } from '../ui/levelPicker.ts';
 import type { ShopStations } from '../world/shopWorld.ts';
 import type { OrderManager } from './orderManager.ts';
+import { discardCupInBin, initCupDisposal } from './cupDisposal.ts';
+import { MAKING_STATION_SPECS } from './stationLookup.ts';
 
 interface PickerSession {
   stationTarget: THREE.Object3D;
@@ -52,12 +55,22 @@ export function createDrinkStations(
   levelPickerUi: LevelPickerView,
   getBlockReason?: (isMakingStation: boolean) => string | null,
 ): DrinkStationController {
-  let heldCup: Cup | null = null;
   let activePicker: PickerSession | null = null;
 
   const toast = (message: string) => bus.emit('toast:show', { message });
-  const syncCupUi = () => heldCupUi.render(heldCup);
+  initCupDisposal({ cleanliness, onTrashChanged, notify: toast });
+  const getHands = () => gameStore.getState().hands;
+  const notifyHandsChanged = () => gameStore.updateState({ hands: getHands() });
+  const getHeldCup = (): { hand: HandId; cup: Cup } | null => {
+    const hands = getHands();
+    const hand = findCupHand(hands);
+    if (!hand) return null;
+    const item = getHeld(hands, hand);
+    return item?.kind === 'cup' ? { hand, cup: item.cup } : null;
+  };
+  const syncCupUi = () => heldCupUi.render(getHeldCup()?.cup ?? null);
   const makingLabel = (label: string) => getBlockReason?.(true) ?? label;
+  const getCount = (item: InventoryItem) => inventory.getCount(item);
 
   const closePicker = () => {
     if (!activePicker) return;
@@ -95,15 +108,16 @@ export function createDrinkStations(
 
   const requireUnsealedCup = (): Cup | null => {
     if (!requireActiveShift(true)) return null;
-    if (!heldCup) {
+    const held = getHeldCup();
+    if (!held) {
       toast('Hãy lấy ly ở kệ ly trước!');
       return null;
     }
-    if (heldCup.sealed) {
+    if (held.cup.sealed) {
       toast('Ly đã đậy nắp, không thể thêm nguyên liệu!');
       return null;
     }
-    return heldCup;
+    return held.cup;
   };
 
   const pickStep = <K extends CupStep>(cup: Cup, step: K, val: CupStepValue[K], msg: string) => {
@@ -112,9 +126,29 @@ export function createDrinkStations(
       toast(`Hết ${INVENTORY_CONFIG[res.missingItem].label}, cần nhập thêm`);
       return;
     }
+    notifyHandsChanged();
     syncCupUi();
     toast(msg);
   };
+
+  const makingInteractables: Interactable[] = MAKING_STATION_SPECS.map((spec) => {
+    const target = stations[spec.id];
+    return {
+      target,
+      label: () => makingLabel(spec.label(getCount)),
+      onInteract() {
+        const cup = requireUnsealedCup();
+        if (!cup) return;
+        openPicker(target, spec.title, spec.options(getCount), (digit) => {
+          // Kiểm tra lại ly vẫn còn trên tay (tránh trường hợp đã ném/đổ trong lúc mở bảng chọn)
+          const current = requireUnsealedCup();
+          if (!current || current !== cup) return;
+          const picked = spec.resolveDigit(digit);
+          pickStep(current, spec.cupStep, picked.value, picked.message);
+        });
+      },
+    };
+  });
 
   const interactables: Interactable[] = [
     {
@@ -123,7 +157,10 @@ export function createDrinkStations(
         const blocked = getBlockReason?.(true);
         if (blocked) return blocked;
         if (orderManager.isOrderLocked()) return 'Kệ ly (nhân viên đang pha đơn)';
-        return heldCup ? 'Kệ ly (đang cầm ly)' : `Lấy ly (còn ${inventory.getCount('cup')})`;
+        const hands = getHands();
+        if (isFull(hands)) return 'Kệ ly (tay đầy)';
+        if (findCupHand(hands) !== null) return 'Kệ ly (đang cầm ly)';
+        return `Lấy ly (còn ${inventory.getCount('cup')})`;
       },
       onInteract() {
         if (!requireActiveShift(true)) return;
@@ -131,97 +168,45 @@ export function createDrinkStations(
           toast('Nhân viên đang pha đơn hiện tại rồi!');
           return;
         }
-        if (heldCup) {
-          toast('Bạn đang cầm 1 ly rồi! Bỏ vào thùng rác nếu muốn làm lại.');
+        const hands = getHands();
+        if (isFull(hands)) {
+          toast('Tay đầy');
+          return;
+        }
+        if (findCupHand(hands) !== null) {
+          toast('Chỉ cầm được một ly');
           return;
         }
         if (!tryConsume('cup')) return;
-        heldCup = createEmptyCup();
+        const res = pickUp(hands, { kind: 'cup', cup: createEmptyCup() });
+        if (!res.ok) {
+          toast(res.reason === 'full' ? 'Tay đầy' : 'Chỉ cầm được một ly');
+          return;
+        }
+        notifyHandsChanged();
         syncCupUi();
         toast('Đã lấy ly! Chọn trà, đá, đường, topping rồi ép nắp.');
       },
     },
-    {
-      target: stations.teaMachine,
-      label: () => makingLabel('Chọn trà nền (1/2/3)'),
-      onInteract() {
-        const cup = requireUnsealedCup();
-        if (!cup) return;
-        openPicker(
-          stations.teaMachine,
-          'Chọn trà nền',
-          [
-            `Trà sữa (${inventory.getCount('traditional')})`,
-            `Trà đào (${inventory.getCount('peach')})`,
-            `Matcha (${inventory.getCount('matcha')})`,
-          ],
-          (digit) => {
-            const base = DRINK_BASE_LIST[digit - 1];
-            pickStep(cup, 'base', base, `Đã rót ${DRINK_LABELS[base]}`);
-          },
-        );
-      },
-    },
-    {
-      target: stations.fridge,
-      label: () => makingLabel(`Cho đá (còn ${inventory.getCount('ice')})`),
-      onInteract() {
-        const cup = requireUnsealedCup();
-        if (!cup) return;
-        openPicker(stations.fridge, 'Chọn lượng đá', ['0% đá', '50% đá', '100% đá'], (digit) => {
-          const ice = LEVEL_PERCENT_LIST[digit - 1];
-          pickStep(cup, 'ice', ice, `Đã cho ${ice}% đá`);
-        });
-      },
-    },
-    {
-      target: stations.sugar,
-      label: () => makingLabel(`Cho đường (còn ${inventory.getCount('sugar')})`),
-      onInteract() {
-        const cup = requireUnsealedCup();
-        if (!cup) return;
-        openPicker(stations.sugar, 'Chọn lượng đường', ['0% đường', '50% đường', '100% đường'], (digit) => {
-          const sugar = LEVEL_PERCENT_LIST[digit - 1];
-          pickStep(cup, 'sugar', sugar, `Đã cho ${sugar}% đường`);
-        });
-      },
-    },
-    {
-      target: stations.topping,
-      label: () => makingLabel('Cho topping (1/2/3)'),
-      onInteract() {
-        const cup = requireUnsealedCup();
-        if (!cup) return;
-        openPicker(
-          stations.topping,
-          'Chọn topping',
-          [
-            'Không topping',
-            `Trân châu (${inventory.getCount('pearl')})`,
-            `Thạch (${inventory.getCount('jelly')})`,
-          ],
-          (digit) => {
-            const topping = TOPPING_LIST[digit - 1];
-            pickStep(cup, 'topping', topping, `Đã chọn: ${TOPPING_LABELS[topping]}`);
-          },
-        );
-      },
-    },
+    ...makingInteractables,
     {
       target: stations.sealer,
       label: () => {
         const blocked = getBlockReason?.(true);
         if (blocked) return blocked;
-        if (!heldCup || !heldCup.base) return 'Máy ép ly (cần trà nền)';
-        return heldCup.sealed ? 'Máy ép ly (đã đậy nắp)' : `Đậy nắp ly (còn ${inventory.getCount('lid')})`;
+        const cup = getHeldCup()?.cup ?? null;
+        if (!cup || !cup.base) return 'Máy ép ly (cần trà nền)';
+        return cup.sealed ? 'Máy ép ly (đã đậy nắp)' : `Đậy nắp ly (còn ${inventory.getCount('lid')})`;
       },
       onInteract() {
         if (!requireActiveShift(true)) return;
-        if (!heldCup) return toast('Hãy lấy ly trước!');
-        if (!heldCup.base) return toast('Cần chọn trà nền trước khi đậy nắp!');
-        if (heldCup.sealed) return toast('Ly này đã được đậy nắp rồi!');
+        const cup = getHeldCup()?.cup ?? null;
+        if (!cup) return toast('Hãy lấy ly trước!');
+        if (!cup.base) return toast('Cần chọn trà nền trước khi đậy nắp!');
+        if (cup.sealed) return toast('Ly này đã được đậy nắp rồi!');
         if (!tryConsume('lid')) return;
-        heldCup.sealed = true;
+        cup.sealed = true;
+        notifyHandsChanged();
         syncCupUi();
         toast('Đã đậy nắp ly! Mang ra quầy giao cho khách.');
       },
@@ -230,15 +215,18 @@ export function createDrinkStations(
       target: stations.counter,
       label: () => {
         if (orderManager.isOrderLocked()) return 'Quầy giao đồ (nhân viên đang pha)';
-        if (!heldCup) return 'Quầy giao đồ (chưa cầm ly)';
-        return heldCup.sealed ? 'Giao ly cho khách' : 'Quầy giao đồ (cần đậy nắp)';
+        const cup = getHeldCup()?.cup ?? null;
+        if (!cup) return 'Quầy giao đồ (chưa cầm ly)';
+        return cup.sealed ? 'Giao ly cho khách' : 'Quầy giao đồ (cần đậy nắp)';
       },
       onInteract() {
         if (!requireActiveShift(false)) return;
-        if (!heldCup) return toast('Bạn chưa cầm ly nào!');
-        if (!heldCup.sealed) return toast('Ly chưa đậy nắp! Hãy qua máy ép ly trước.');
-        if (orderManager.deliverCup(heldCup)) {
-          heldCup = null;
+        const held = getHeldCup();
+        if (!held) return toast('Bạn chưa cầm ly nào!');
+        if (!held.cup.sealed) return toast('Ly chưa đậy nắp! Hãy qua máy ép ly trước.');
+        if (orderManager.deliverCup(held.cup)) {
+          removeFrom(getHands(), held.hand);
+          notifyHandsChanged();
           closePicker();
           syncCupUi();
         }
@@ -248,7 +236,7 @@ export function createDrinkStations(
       target: stations.trashCan,
       label: () => {
         if (cleanliness.isTrashFull()) return 'Đổ thùng rác đầy';
-        return heldCup ? 'Bỏ ly đang cầm' : `Thùng rác (${cleanliness.getTrashCups()}/${TRASH_FULL_CUPS})`;
+        return getHeldCup() ? 'Bỏ ly đang cầm' : `Thùng rác (${cleanliness.getTrashCups()}/${TRASH_FULL_CUPS})`;
       },
       onInteract() {
         const blocked = getBlockReason?.(false);
@@ -259,15 +247,13 @@ export function createDrinkStations(
           toast('Đã đổ thùng rác sạch sẽ!');
           return;
         }
-        if (!heldCup) return toast('Bạn đang tay không!');
-        heldCup = null;
+        const held = getHeldCup();
+        if (!held) return toast('Bạn đang tay không!');
+        removeFrom(getHands(), held.hand);
+        notifyHandsChanged();
         closePicker();
         syncCupUi();
-        const res = cleanliness.recordTrashCup();
-        onTrashChanged();
-        if (res.becameFull) toast('Thùng rác đã đầy! Nhấn E để đổ rác.');
-        else if (res.spilled) toast('Ối, làm đổ vết bẩn cạnh thùng rác!');
-        else toast('Đã bỏ ly vào thùng rác!');
+        discardCupInBin(held.cup);
       },
     },
   ];
@@ -287,10 +273,15 @@ export function createDrinkStations(
     },
     closePicker,
     clearHeldCup() {
-      heldCup = null;
+      const hands = getHands();
+      const hand = findCupHand(hands);
+      if (hand) {
+        removeFrom(hands, hand);
+        notifyHandsChanged();
+      }
       closePicker();
       syncCupUi();
     },
-    hasHeldCup: () => heldCup !== null,
+    hasHeldCup: () => findCupHand(getHands()) !== null,
   };
 }

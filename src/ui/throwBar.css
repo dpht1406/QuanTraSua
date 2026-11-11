@@ -1,0 +1,43 @@
+.throw-bar {
+  position: fixed;
+  top: calc(50% + 84px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.throw-bar-label {
+  background: #fff7ee;
+  border: 2px solid #1c1615;
+  border-radius: 8px;
+  padding: 2px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #1c1615;
+  box-shadow: 0 2px 0 #1c1615;
+}
+
+.throw-bar-track {
+  width: 170px;
+  height: 11px;
+  background: #fff7ee;
+  border: 2px solid #1c1615;
+  border-radius: 99px;
+  overflow: hidden;
+  box-shadow: 0 2px 0 #1c1615;
+}
+
+.throw-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: #a2c9a6;
+}
+
+.throw-bar.strong .throw-bar-fill {
+  background: #f6b0bc;
+}

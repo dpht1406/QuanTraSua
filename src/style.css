@@ -132,11 +132,13 @@ canvas {
   position: absolute;
   bottom: 14px;
   left: 16px;
+  max-width: calc(100% - 472px);
   background: rgba(255, 247, 238, 0.88);
   border: 2px solid #1c1615;
   border-radius: 10px;
-  padding: 6px 12px;
-  font-size: 13px;
+  padding: 5px 11px;
+  font-size: 12px;
+  line-height: 1.35;
   font-weight: 600;
 }
 

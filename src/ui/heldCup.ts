@@ -10,6 +10,7 @@ export interface HeldCupView {
 export function createHeldCupView(root: HTMLElement): HeldCupView {
   const box = document.createElement('div');
   box.className = 'held-cup hidden';
+  box.style.bottom = '126px';
   box.innerHTML = `
     <div class="cup-visual">
       <div class="cup-straw hidden" data-el="straw"></div>

@@ -35,8 +35,11 @@ export function createMenuOverlay(
         <span>WASD: Di chuyển</span>
         <span>Shift: Chạy nhẹ</span>
         <span>Chuột: Nhìn</span>
-        <span>E: Tương tác</span>
-        <span>Giữ E: Lau dọn</span>
+        <span>Chuột trái / phải: Dùng vật tay phải / trái</span>
+        <span>Giữ chuột: Quét / Lau bằng chổi / cây lau</span>
+        <span>F / Q: Thả nhẹ hoặc giữ để ném (phải / trái)</span>
+        <span>R: Đổ lại nguyên liệu</span>
+        <span>E: Tương tác / Nhặt / Cất / Đổ rác</span>
         <span>1/2/3: Chọn món / Phản hồi</span>
         <span>G: Chào khách</span>
         <span>Y/N: Kết ca sớm</span>

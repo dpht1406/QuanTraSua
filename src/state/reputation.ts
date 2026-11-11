@@ -65,6 +65,11 @@ export function createReputationStore(
     dirtyTimerSec = 0;
   });
 
+  // Đồng bộ nếu module ngoài (vd: ném vật / đổ ngược) cập nhật reputationChanged trực tiếp
+  bus.on('reputationChanged', ({ value: next }) => {
+    value = clampReputation(next);
+  });
+
   bus.on('cleanlinessChanged', ({ value: clean }) => {
     latestCleanliness = clean;
     if (latestCleanliness >= REP_DIRTY_THRESHOLD) {
@@ -174,9 +179,11 @@ export function createComplaintController(
       return active ? { ...active } : null;
     },
 
-    maybeTrigger(scoreTotal: number, payout: number, fallbackCost: number): boolean {
-      if (active || scoreTotal >= COMPLAINT_SCORE_THRESHOLD) return false;
-      if (rng() >= COMPLAINT_CHANCE) return false;
+    maybeTrigger(scoreTotal: number, payout: number, fallbackCost: number, bonusChance = 0): boolean {
+      if (active) return false;
+      const baseChance = scoreTotal < COMPLAINT_SCORE_THRESHOLD ? COMPLAINT_CHANCE : 0;
+      const chance = Math.max(0, Math.min(0.95, baseChance + bonusChance));
+      if (chance <= 0 || rng() >= chance) return false;
       active = {
         refundCost: payout > 0 ? payout : fallbackCost,
         remainingSec: COMPLAINT_TIMEOUT_SEC,

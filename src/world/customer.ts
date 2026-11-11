@@ -1,7 +1,10 @@
 import * as THREE from 'three';
+import { FALL_CUSTOMER_LIE_SEC, FALL_DOWN_SEC, FALL_GETUP_SEC } from '../state/constantsThrow.ts';
 import { addOutline } from '../styles/outline.ts';
 import { getToonMaterial, PALETTE } from '../styles/palette.ts';
+import { createFallAnimation, type FallDir } from './fallAnimation.ts';
 import { makeBox } from './furniture.ts';
+import type { Aabb3D } from './shopWorld.ts';
 
 export interface Waypoint {
   x: number;
@@ -10,14 +13,19 @@ export interface Waypoint {
 
 export interface CustomerActor {
   root: THREE.Group;
+  readonly hitbox: Aabb3D | null;
+  readonly isLeaving: boolean;
   spawnAt(waypoints: readonly Waypoint[], onArrived: () => void): void;
-  leaveAlong(waypoints: readonly Waypoint[], onExited: () => void): void;
+  leaveAlong(waypoints: readonly Waypoint[], onExited: () => void, options?: { fall?: boolean; hitDir?: FallDir }): void;
   update(dt: number): void;
   hide(): void;
+  clearFall(): void;
 }
 
 const SHIRT_COLORS = [PALETTE.pinkBlush, PALETTE.matchaGreen, PALETTE.syrupPeach, PALETTE.glassBlue];
 const WALK_SPEED = 1.9;
+const HITBOX_HALF_W = 0.28;
+const HITBOX_HEIGHT = 1.56;
 
 // Tạo nhân vật khách hàng đơn giản từ khối capsule/hình cầu có viền đen và di chuyển theo waypoint
 export function createCustomerActor(): CustomerActor {
@@ -62,15 +70,29 @@ export function createCustomerActor(): CustomerActor {
   let path: readonly Waypoint[] = [];
   let pathIdx = 0;
   let walking = false;
+  let leaving = false;
   let onDone: (() => void) | null = null;
   let walkTime = 0;
   let shirtIdx = 0;
+  const fallAnim = createFallAnimation(root, 1.32);
 
   return {
     root,
 
+    // shortcut: khách chỉ có hitbox để ném trúng và không tạo collider đẩy người chơi, nâng cấp khi cần đẩy vật lý
+    get hitbox(): Aabb3D | null {
+      if (!root.visible) return null;
+      return fallAnim.getHitbox(root.position.x, root.position.z, HITBOX_HALF_W, HITBOX_HEIGHT);
+    },
+
+    get isLeaving(): boolean {
+      return leaving;
+    },
+
     spawnAt(waypoints, onArrived) {
       if (waypoints.length === 0) return;
+      fallAnim.reset();
+      root.rotation.set(0, 0, 0);
       shirtIdx = (shirtIdx + 1) % SHIRT_COLORS.length;
       torsoMat.color.setHex(SHIRT_COLORS[shirtIdx]);
 
@@ -79,26 +101,43 @@ export function createCustomerActor(): CustomerActor {
       path = waypoints;
       pathIdx = 1;
       walking = waypoints.length > 1;
+      leaving = false;
       onDone = onArrived;
       if (!walking) onArrived();
     },
 
-    leaveAlong(waypoints, onExited) {
+    leaveAlong(waypoints, onExited, options) {
       path = waypoints;
       pathIdx = 0;
       walking = waypoints.length > 0;
+      leaving = true;
       onDone = onExited;
-      if (!walking) {
+      if (options?.fall) {
+        fallAnim.trigger(FALL_DOWN_SEC + FALL_CUSTOMER_LIE_SEC + FALL_GETUP_SEC, options.hitDir, root.rotation.y);
+      } else {
+        fallAnim.reset();
+      }
+      if (!walking && !fallAnim.isActive()) {
         root.visible = false;
+        leaving = false;
         onExited();
       }
     },
 
     update(dt) {
       if (!root.visible) return;
+      if (fallAnim.update(dt)) return;
       walkTime += dt;
 
       if (!walking) {
+        if (leaving && onDone) {
+          root.visible = false;
+          leaving = false;
+          const cb = onDone;
+          onDone = null;
+          cb();
+          return;
+        }
         // Nhún nhẹ khi đứng chờ tại quầy
         root.position.y = Math.abs(Math.sin(walkTime * 3.0)) * 0.02;
         return;
@@ -132,9 +171,17 @@ export function createCustomerActor(): CustomerActor {
     },
 
     hide() {
+      fallAnim.reset();
+      root.rotation.set(0, 0, 0);
+      root.position.y = 0;
       root.visible = false;
       walking = false;
+      leaving = false;
       onDone = null;
+    },
+
+    clearFall() {
+      fallAnim.reset();
     },
   };
 }

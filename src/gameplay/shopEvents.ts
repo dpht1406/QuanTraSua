@@ -97,8 +97,8 @@ export function createShopEventsBridge(
           reputation.recordGreet();
           toast('Đã chào khách! (+1 uy tín)');
         },
-        onOrderDelivered: (order, score, payout) => {
-          if (complaint.maybeTrigger(score.total, payout, getOrderPrice(order))) {
+        onOrderDelivered: (order, score, payout, complaintBonus = 0) => {
+          if (complaint.maybeTrigger(score.total, payout, getOrderPrice(order), complaintBonus)) {
             closeDrinkPicker();
             complaintPopup.sync(complaint.getActive());
           }

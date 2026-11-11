@@ -2,6 +2,7 @@ import { INVENTORY_CONFIG } from './constants.ts';
 
 export type InventoryItem = keyof typeof INVENTORY_CONFIG;
 export type InventoryStock = Record<InventoryItem, number>;
+export type InventoryContamination = Record<InventoryItem, number>;
 
 export const INVENTORY_ITEMS = Object.keys(INVENTORY_CONFIG) as InventoryItem[];
 
@@ -12,6 +13,24 @@ export function createInitialStock(): InventoryStock {
     stock[item] = INVENTORY_CONFIG[item].initial;
   }
   return stock;
+}
+
+// Kẹp độ nhiễm nguyên liệu trong khoảng 0..100
+export function clampContamination(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
+// Tạo bảng độ nhiễm 0..100 mặc định 0 cho mọi nguyên liệu
+export function createInitialContamination(
+  seed?: Partial<Record<InventoryItem, number>>,
+): InventoryContamination {
+  const out = {} as InventoryContamination;
+  for (const item of INVENTORY_ITEMS) {
+    const raw = seed?.[item];
+    out[item] = raw === undefined ? 0 : clampContamination(raw);
+  }
+  return out;
 }
 
 // Tính chi phí nhập theo số gói của một mặt hàng
@@ -26,12 +45,14 @@ export function unitCostOf(item: InventoryItem): number {
   return cfg.packCost / cfg.packSize;
 }
 
-// Tạo store quản lý kho nguyên liệu (kiểm tra, trừ kho, nhập kho)
+// Tạo store quản lý kho nguyên liệu (kiểm tra, trừ kho, nhập kho và độ nhiễm)
 export function createInventoryStore(
   initial: InventoryStock = createInitialStock(),
   onChanged?: (stock: InventoryStock, spentCost: number) => void,
+  initialContamination?: Partial<Record<InventoryItem, number>>,
 ) {
   const stock: InventoryStock = { ...initial };
+  const contamination: InventoryContamination = createInitialContamination(initialContamination);
 
   return {
     getStock(): InventoryStock {
@@ -40,6 +61,27 @@ export function createInventoryStore(
 
     getCount(item: InventoryItem): number {
       return stock[item];
+    },
+
+    getContamination(): InventoryContamination {
+      return { ...contamination };
+    },
+
+    getContaminationOf(item: InventoryItem): number {
+      return contamination[item];
+    },
+
+    setContamination(item: InventoryItem, level: number): number {
+      const next = clampContamination(level);
+      contamination[item] = next;
+      return next;
+    },
+
+    restoreContamination(next?: Partial<Record<InventoryItem, number>>): void {
+      const clean = createInitialContamination(next);
+      for (const item of INVENTORY_ITEMS) {
+        contamination[item] = clean[item];
+      }
     },
 
     canConsume(item: InventoryItem, qty = 1): boolean {
@@ -61,15 +103,43 @@ export function createInventoryStore(
       onChanged?.({ ...stock }, 0);
       return added;
     },
+
+    refund(item: InventoryItem, qty: number): number {
+      if (qty <= 0 || !Number.isFinite(qty)) return 0;
+      const next = Math.round((stock[item] + qty) * 100) / 100;
+      const added = Math.max(0, Math.round((next - stock[item]) * 100) / 100);
+      stock[item] = next;
+      onChanged?.({ ...stock }, 0);
+      return added;
+    },
+
+    spoil(item: InventoryItem, ratio: number): number {
+      if (ratio <= 0 || !Number.isFinite(ratio) || stock[item] <= 0) return 0;
+      const current = stock[item];
+      const remaining = Math.floor(current * (1 - Math.min(1, ratio)));
+      const lost = Math.round((current - remaining) * 100) / 100;
+      if (lost <= 0) return 0;
+      stock[item] = remaining;
+      onChanged?.({ ...stock }, 0);
+      return lost;
+    },
   };
 }
 
-// Tính tổng tiền và nhập giỏ hàng nguyên liệu nếu đủ tiền
+export type InventoryStore = ReturnType<typeof createInventoryStore>;
+
+// Tính tổng tiền, nhập giỏ hàng và pha loãng độ nhiễm nguyên liệu theo tồn kho mới
 export function purchaseRestockCart(
-  inventory: ReturnType<typeof createInventoryStore>,
+  inventory: InventoryStore,
   cart: Partial<Record<InventoryItem, number>>,
   money: number,
-): { ok: boolean; message: string; stock?: InventoryStock; money?: number } {
+): {
+  ok: boolean;
+  message: string;
+  stock?: InventoryStock;
+  contamination?: InventoryContamination;
+  money?: number;
+} {
   let total = 0;
   for (const item of INVENTORY_ITEMS) {
     const packs = cart[item] ?? 0;
@@ -80,12 +150,20 @@ export function purchaseRestockCart(
   }
   for (const item of INVENTORY_ITEMS) {
     const packs = cart[item] ?? 0;
-    if (packs > 0) inventory.restock(item, packs);
+    if (packs <= 0) continue;
+    const oldStock = inventory.getCount(item);
+    const oldContam = inventory.getContaminationOf(item);
+    const added = inventory.restock(item, packs);
+    if (added > 0 && oldContam > 0) {
+      const nextContam = oldStock <= 0 ? 0 : (oldContam * oldStock) / (oldStock + added);
+      inventory.setContamination(item, nextContam);
+    }
   }
   return {
     ok: true,
     message: 'Đã nhập hàng thành công!',
     stock: inventory.getStock(),
+    contamination: inventory.getContamination(),
     money: money - total,
   };
 }

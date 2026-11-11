@@ -1,16 +1,28 @@
+import './contaminationHud.css';
 import { INVENTORY_CONFIG } from '../state/constants.ts';
+import { CONTAM_THRESHOLD } from '../state/constantsContam.ts';
 import {
   costOf,
   INVENTORY_ITEMS,
+  type InventoryContamination,
   type InventoryItem,
   type InventoryStock,
 } from '../state/inventory.ts';
 
 export interface RestockPanelView {
-  open(stock: InventoryStock, money: number): void;
+  open(stock: InventoryStock, money: number, contamination?: InventoryContamination): void;
   close(): void;
   isOpen(): boolean;
   dispose(): void;
+}
+
+let contaminationProvider: (() => InventoryContamination) | null = null;
+
+// Gắn nguồn đọc độ nhiễm hiện tại cho bảng nhập hàng
+export function setRestockContaminationProvider(
+  provider: (() => InventoryContamination) | null,
+): void {
+  contaminationProvider = provider;
 }
 
 const fmt = new Intl.NumberFormat('vi-VN');
@@ -22,6 +34,7 @@ export function createRestockPanel(
     ok: boolean;
     message: string;
     stock?: InventoryStock;
+    contamination?: InventoryContamination;
     money?: number;
   },
   onClose: () => void,
@@ -55,6 +68,7 @@ export function createRestockPanel(
   const buyBtn = overlay.querySelector<HTMLButtonElement>('[data-el="buy"]')!;
 
   let currentStock: InventoryStock | null = null;
+  let currentContam: InventoryContamination | null = null;
   let currentMoney = 0;
   let cart: Partial<Record<InventoryItem, number>> = {};
 
@@ -75,11 +89,19 @@ export function createRestockPanel(
     listEl.innerHTML = INVENTORY_ITEMS.map((item) => {
       const cfg = INVENTORY_CONFIG[item];
       const packs = cart[item] ?? 0;
+      const qty = currentStock![item];
+      const qtyText = Number.isInteger(qty) ? String(qty) : qty.toFixed(1);
+      const contam = currentContam?.[item] ?? 0;
+      const pct = contam > 0 ? Math.max(1, Math.round(contam)) : 0;
+      const contamTag =
+        pct > 0
+          ? `<span class="contam-tag ${contam >= CONTAM_THRESHOLD ? 'over' : 'mild'}">Nhiễm: ${pct}%</span>`
+          : '';
       return `
         <div class="restock-row">
           <div>
-            <div class="row-name">${cfg.label}</div>
-            <div class="row-meta">Tồn: ${currentStock![item]} · Gói ${cfg.packSize} (${fmt.format(cfg.packCost)}đ)</div>
+            <div class="row-name">${cfg.label}${contamTag}</div>
+            <div class="row-meta">Tồn: ${qtyText} · Gói ${cfg.packSize} (${fmt.format(cfg.packCost)}đ)</div>
           </div>
           <div class="row-qty">
             <button type="button" class="qty-btn" data-op="dec" data-item="${item}">-</button>
@@ -121,6 +143,7 @@ export function createRestockPanel(
     msgEl.classList.toggle('err', !res.ok);
     if (res.ok && res.stock && res.money !== undefined) {
       currentStock = res.stock;
+      currentContam = res.contamination ?? contaminationProvider?.() ?? currentContam;
       currentMoney = res.money;
       cart = {};
       renderRows();
@@ -132,8 +155,9 @@ export function createRestockPanel(
   buyBtn.addEventListener('click', handleBuy);
 
   return {
-    open(stock, money) {
+    open(stock, money, contamination) {
       currentStock = { ...stock };
+      currentContam = contamination ? { ...contamination } : (contaminationProvider?.() ?? null);
       currentMoney = money;
       cart = {};
       msgEl.textContent = '';

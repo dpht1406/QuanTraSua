@@ -2,90 +2,40 @@ import './style.css';
 import './ui/gameplayHud.css';
 import './ui/panels.css';
 import './ui/staffPanel.css';
+import { bindGameInput, createShopPanels, initStoresAndSave } from './core/bootstrap.ts';
 import { startGameLoop } from './core/gameLoop.ts';
 import { createInput } from './core/input.ts';
 import { createSceneSetup } from './core/sceneSetup.ts';
 import { createDrinkStations } from './gameplay/drinkStations.ts';
+import type { GameCtx } from './gameplay/gameCtx.ts';
+import { initPhase6Modules } from './gameplay/gameWiring.ts';
 import { createOrderManager } from './gameplay/orderManager.ts';
 import { createShiftManager } from './gameplay/shiftManager.ts';
 import { createShopEventsBridge } from './gameplay/shopEvents.ts';
 import { createStaffManager } from './gameplay/staffManager.ts';
+import { initStationLookup } from './gameplay/stationLookup.ts';
 import { createInteractionSystem } from './interaction/interactionSystem.ts';
 import { createFirstPersonController } from './player/firstPersonController.ts';
-import { createCleanlinessStore } from './state/cleanliness.ts';
 import { gameStore } from './state/gameState.ts';
-import { createInventoryStore, purchaseRestockCart } from './state/inventory.ts';
-import { applyLoadedSave, bindAutoSave, createSaveController, loadSave, type StorageLike } from './state/save.ts';
-import { createStaffStore } from './state/staff.ts';
-import { createTutorialController, TUTORIAL_SKIP_KEY } from './state/tutorial.ts';
 import { createHeldCupView } from './ui/heldCup.ts';
 import { createHud } from './ui/hud.ts';
 import { createLevelPicker } from './ui/levelPicker.ts';
-import { createMenuOverlay } from './ui/menuOverlay.ts';
 import { createOrderTicket } from './ui/orderTicket.ts';
-import { createRestockPanel } from './ui/restockPanel.ts';
-import { createShiftSummaryView } from './ui/shiftSummary.ts';
-import { createStaffPanel } from './ui/staffPanel.ts';
-import { createTutorialBox } from './ui/tutorialBox.ts';
 import { createCleanlinessView } from './world/cleanlinessView.ts';
 import { createCustomerActor } from './world/customer.ts';
 import { createShopWorld } from './world/shopWorld.ts';
 
-function getSafeLocalStorage(): StorageLike | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
-// Khởi tạo toàn bộ game và kết nối lưu/tải tiến trình, hướng dẫn, uy tín, sự kiện và pha chế
+// Khởi tạo toàn bộ game và kết nối cảnh 3D, tương tác, nhân viên và vòng lặp chính
 function bootstrap() {
   const app = document.getElementById('app');
   if (!app) throw new Error('Không tìm thấy phần tử #app');
 
-  const storage = getSafeLocalStorage();
-  const loadRes = loadSave(storage);
-  const loaded = loadRes.data;
-
   const { scene, camera, renderer, setDimmed } = createSceneSetup(app);
   const input = createInput();
 
-  const inventory = createInventoryStore(loaded?.inventory, (stock, spentCost) => {
-    gameStore.bus.emit('stockChanged', { stock, spentCost });
-  });
-
   let cleanlinessView: ReturnType<typeof createCleanlinessView> | null = null;
-  const cleanliness = createCleanlinessStore(gameStore.bus, {
-    onSync: (value) => {
-      gameStore.updateState({ cleanliness: value });
-      cleanlinessView?.sync();
-    },
-  });
-  const staffStore = createStaffStore(gameStore.bus);
-  if (loaded) applyLoadedSave(loaded, gameStore, cleanliness, staffStore);
-
-  const tutorialBox = createTutorialBox(app, () => tutorial.skip());
-  let saveCtrl: ReturnType<typeof createSaveController>;
-  const tutorial = createTutorialController(gameStore.bus, {
-    initialDone: loaded?.tutorialDone ?? false,
-    onChange: (view) => tutorialBox.render(view),
-    onDone: () => saveCtrl.saveTutorialDone(),
-  });
-  saveCtrl = createSaveController({
-    storage,
-    initialSave: loaded,
-    getSnapshot: () => ({
-      state: gameStore.getState(),
-      inventory: inventory.getStock(),
-      staff: staffStore.getHired(),
-      stains: cleanliness.getStains(),
-      tutorialDone: tutorial.isDone(),
-    }),
-    onStorageError: () => gameStore.bus.emit('toast:show', { message: 'Không lưu được tiến trình' }),
-  });
-  bindAutoSave(gameStore.bus, saveCtrl);
-  tutorialBox.render(tutorial.getView());
+  const { storage, loadRes, loaded, inventory, cleanliness, staffStore, tutorial, saveCtrl } =
+    initStoresAndSave(app, () => cleanlinessView?.sync());
 
   const world = createShopWorld((message) => {
     gameStore.bus.emit('toast:show', { message });
@@ -142,32 +92,24 @@ function bootstrap() {
     (isMaking) => shopEvents.getDrinkBlockReason(isMaking),
   );
 
-  const restockPanel = createRestockPanel(
-    app,
-    (cart) => {
-      const res = purchaseRestockCart(inventory, cart, gameStore.getState().money);
-      if (res.ok && res.money !== undefined) {
-        gameStore.updateState({ money: res.money });
-        saveCtrl.saveIfAllowed();
-      }
-      return res;
-    },
-    () => hud.setRelockVisible(true),
-  );
-
-  const staffPanel = createStaffPanel(
-    app,
+  const panels = createShopPanels(app, {
+    inventory,
     staffStore,
-    () => gameStore.getState().shiftState,
-    () => hud.setRelockVisible(true),
-  );
-
-  const shiftSummary = createShiftSummaryView(app, () => {
-    suppressPauseOverlay = false;
-    shiftManager.nextDay();
-    saveCtrl.saveIfAllowed();
-    orderTicket.setOrder(null, 'closed');
-    player.lock();
+    saveCtrl,
+    loaded,
+    setRelockVisible: (visible) => hud.setRelockVisible(visible),
+    onNextDay: () => {
+      suppressPauseOverlay = false;
+      shiftManager.nextDay();
+      saveCtrl.saveIfAllowed();
+      orderTicket.setOrder(null, 'closed');
+      player.lock();
+    },
+    onEnterGame: () => {
+      suppressPauseOverlay = false;
+      hud.setRelockVisible(false);
+      player.lock();
+    },
   });
 
   shiftManager = createShiftManager(
@@ -178,17 +120,17 @@ function bootstrap() {
     () => {
       suppressPauseOverlay = true;
       player.unlock();
-      restockPanel.open(inventory.getStock(), gameStore.getState().money);
+      panels.restockPanel.open(inventory.getStock(), gameStore.getState().money);
     },
     () => {
       suppressPauseOverlay = true;
       player.unlock();
-      staffPanel.open();
+      panels.staffPanel.open();
     },
     (summary, day) => {
       suppressPauseOverlay = true;
       player.unlock();
-      shiftSummary.show(summary, day);
+      panels.shiftSummary.show(summary, day);
     },
     () => drinkStations.clearHeldCup(),
     shopEvents.getShiftHooks(),
@@ -200,6 +142,7 @@ function bootstrap() {
     (label, isHold) => hud.setPrompt(label, isHold),
     (progress) => hud.setHoldProgress(progress),
   );
+  initStationLookup(world.stations, () => interaction.getCurrentTarget()?.target ?? null);
 
   cleanlinessView = createCleanlinessView(world, cleanliness, interaction, (message) => {
     gameStore.bus.emit('toast:show', { message });
@@ -217,21 +160,6 @@ function bootstrap() {
     () => shopEvents.isPowerOutage(),
   );
 
-  const menu = createMenuOverlay(app, {
-    saveSummary: loaded ? { day: loaded.day, money: loaded.money, reputation: loaded.reputation } : null,
-    canRestart: () => gameStore.getState().shiftState === 'closed',
-    onEnterGame: () => {
-      suppressPauseOverlay = false;
-      hud.setRelockVisible(false);
-      player.lock();
-    },
-    onRestartGame: () => {
-      // shortcut: xóa save rồi tải lại trang để khởi tạo sạch toàn bộ state và cảnh 3D; nâng cấp sau bằng reset in-memory nếu cần
-      saveCtrl.clear();
-      window.location.reload();
-    },
-  });
-
   player = createFirstPersonController(
     camera,
     renderer.domElement,
@@ -239,7 +167,7 @@ function bootstrap() {
     world.colliders,
     (locked) => {
       hud.setLocked(locked);
-      menu.setLocked(locked, suppressPauseOverlay);
+      panels.menu.setLocked(locked, suppressPauseOverlay);
       if (!locked) {
         drinkStations.closePicker();
         shiftManager.confirmEarlyClose(false);
@@ -249,29 +177,54 @@ function bootstrap() {
     },
   );
 
-  input.onInteract(() => {
-    if (player.isLocked()) interaction.trigger();
+  bindGameInput(input, {
+    isLocked: () => player.isLocked(),
+    triggerInteract: () => interaction.trigger(),
+    shopEvents,
+    drinkStations,
+    orderManager,
+    shiftManager,
+    tutorial,
+    isMenuOpen: () => panels.menu.isOpen(),
+    onEscape: () => {
+      if (panels.restockPanel.isOpen()) panels.restockPanel.close();
+      if (panels.staffPanel.isOpen()) panels.staffPanel.close();
+    },
   });
-  input.onDigit((digit) => {
-    if (!player.isLocked()) return;
-    if (!shopEvents.handleDigit(digit)) drinkStations.pickDigit(digit);
-  });
-  input.onKey('KeyG', () => {
-    if (player.isLocked()) orderManager.tryGreet();
-  });
-  input.onKey('KeyY', () => {
-    if (player.isLocked()) shiftManager.confirmEarlyClose(true);
-  });
-  input.onKey('KeyN', () => {
-    if (player.isLocked()) shiftManager.confirmEarlyClose(false);
-  });
-  input.onKey(TUTORIAL_SKIP_KEY, () => {
-    if (tutorial.isActive() && !menu.isOpen()) tutorial.skip();
-  });
-  input.onKey('Escape', () => {
-    if (restockPanel.isOpen()) restockPanel.close();
-    if (staffPanel.isOpen()) staffPanel.close();
-  });
+
+  const loopTicks = new Set<(dt: number) => void>();
+  const ctx: GameCtx = {
+    app,
+    scene,
+    camera,
+    renderer,
+    player,
+    input,
+    interaction,
+    colliders: world.colliders,
+    shopWorld: world,
+    customer,
+    eventBus: gameStore.bus,
+    gameStore,
+    storage,
+    loadedSave: loaded,
+    inventory,
+    cleanliness,
+    cleanlinessView,
+    staffStore,
+    staffManager,
+    orderManager,
+    shiftManager,
+    drinkStations,
+    hud,
+    heldCupUi,
+    saveCtrl,
+    registerTick(fn) {
+      loopTicks.add(fn);
+      return () => loopTicks.delete(fn);
+    },
+  };
+  initPhase6Modules(ctx);
 
   startGameLoop(scene, camera, renderer, (dt) => {
     player.update(dt);
@@ -286,6 +239,7 @@ function bootstrap() {
       cleanliness.update(dt, shiftState);
       shopEvents.update(dt, shiftState, orderManager.getActiveOrder());
       staffManager.update(dt, shiftState);
+      for (const tick of loopTicks) tick(dt);
     }
   });
 }

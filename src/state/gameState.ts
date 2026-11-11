@@ -1,5 +1,6 @@
 import { createEventBus } from './eventBus.ts';
-import type { InventoryStock } from './inventory.ts';
+import { createHands, type HandsState } from './hands.ts';
+import type { InventoryItem, InventoryStock } from './inventory.ts';
 import type { ScoreResult } from './scoring.ts';
 import {
   createEmptyShiftStats,
@@ -8,9 +9,18 @@ import {
   type ShiftSummary,
 } from './shift.ts';
 import type { StaffMember } from './staff.ts';
+import { createToolLocations, type ToolLocations } from './toolLocations.ts';
 
 export type ComplaintChoice = 'apologize' | 'refund' | 'ignore';
 export type RandomEventType = 'picky_customer' | 'power_outage' | 'rush_hour';
+export type ThrowObjectKind = 'cup' | 'broom' | 'mop';
+export type ThrowHitTarget = 'customer' | 'staff' | 'bin' | 'floor' | 'wall' | 'table' | 'counter';
+export type Phase6EventReason =
+  | 'bi_nem'
+  | 'nhan_vien_choang'
+  | 'do_nguyen_lieu'
+  | 'bi_nem_nhieu_lan';
+export type GameEventReason = Phase6EventReason | (string & {});
 
 export interface GameState {
   money: number;
@@ -21,23 +31,28 @@ export interface GameState {
   cleanliness: number;
   shiftState: ShiftState;
   shiftStats: ShiftStats;
+  hands: HandsState;
+  tools: ToolLocations;
 }
 
 export type GameEvents = {
   'state:changed': GameState;
   'toast:show': { message: string };
   orderServed: { score: ScoreResult; elapsed: number; payout: number };
-  orderFailed: { reason: string };
+  orderFailed: { reason: GameEventReason };
   shiftOpened: { day: number };
   shiftClosed: { summary: ShiftSummary };
   stockChanged: { stock: InventoryStock; spentCost: number };
   cleanlinessChanged: { value: number; delta: number };
-  reputationChanged: { value: number; delta: number; reason: string };
+  reputationChanged: { value: number; delta: number; reason: GameEventReason };
   customerComplained: { choice: ComplaintChoice };
   randomEventStarted: { type: RandomEventType };
   randomEventEnded: { type: RandomEventType };
   staffHired: { staff: StaffMember };
-  staffFired: { staff: StaffMember; reason?: string };
+  staffFired: { staff: StaffMember; reason?: GameEventReason };
+  objectThrown: { kind: ThrowObjectKind; hit: ThrowHitTarget };
+  ingredientContaminated: { item: InventoryItem; level: number };
+  ingredientSpoiled: { item: InventoryItem; lost: number };
 };
 
 export const DEFAULT_GAME_STATE: GameState = {
@@ -49,11 +64,18 @@ export const DEFAULT_GAME_STATE: GameState = {
   cleanliness: 100,
   shiftState: 'closed',
   shiftStats: createEmptyShiftStats(),
+  hands: createHands(),
+  tools: createToolLocations(),
 };
 
 // Tạo store lưu GameState và tự động phát sự kiện khi cập nhật
 export function createGameStore(initial: GameState = DEFAULT_GAME_STATE) {
-  let state: GameState = { ...initial, shiftStats: { ...initial.shiftStats } };
+  let state: GameState = {
+    ...initial,
+    shiftStats: { ...initial.shiftStats },
+    hands: { ...initial.hands },
+    tools: { ...initial.tools },
+  };
   const bus = createEventBus<GameEvents>();
 
   const snapshot = (): GameState => ({
@@ -86,6 +108,8 @@ export function createGameStore(initial: GameState = DEFAULT_GAME_STATE) {
       state = {
         ...DEFAULT_GAME_STATE,
         shiftStats: createEmptyShiftStats(),
+        hands: createHands(),
+        tools: createToolLocations(),
       };
       const next = snapshot();
       bus.emit('state:changed', next);
@@ -93,5 +117,7 @@ export function createGameStore(initial: GameState = DEFAULT_GAME_STATE) {
     },
   };
 }
+
+export type GameStore = ReturnType<typeof createGameStore>;
 
 export const gameStore = createGameStore();

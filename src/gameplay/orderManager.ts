@@ -1,14 +1,11 @@
-import {
-  GREET_WINDOW_SEC,
-  ORDER_PATIENCE_SEC,
-  PICKY_PATIENCE_MULTIPLIER,
-} from '../state/constants.ts';
+import { GREET_WINDOW_SEC, ORDER_PATIENCE_SEC, PICKY_PATIENCE_MULTIPLIER } from '../state/constants.ts';
 import type { EventBus } from '../state/eventBus.ts';
-import { gameStore, type GameEvents } from '../state/gameState.ts';
+import { gameStore, type GameEventReason, type GameEvents } from '../state/gameState.ts';
 import { generateOrder, type DrinkOrder } from '../state/menu.ts';
 import { scoreDrink, type Cup, type ScoreResult } from '../state/scoring.ts';
 import { getCustomerGapMultiplier, getCustomerGapRange } from '../state/shift.ts';
 import type { CustomerActor, Waypoint } from '../world/customer.ts';
+import type { FallDir } from '../world/fallPose.ts';
 
 export interface ActiveOrderView {
   order: DrinkOrder;
@@ -24,25 +21,29 @@ export interface OrderManagerHooks {
   onPickyFinished?: () => void;
   onGreetWindow?: (remainingSec: number | null) => void;
   onGreetSuccess?: () => void;
-  onOrderDelivered?: (order: DrinkOrder, score: ScoreResult, payout: number) => void;
+  onOrderDelivered?: (
+    order: DrinkOrder,
+    score: ScoreResult,
+    payout: number,
+    complaintBonus?: number,
+  ) => void;
 }
 
 export interface OrderManager {
   update(dt: number): void;
   deliverCup(cup: Cup): boolean;
   deliverStaffCup(cup: Cup): boolean;
-  getActiveOrder(): {
-    order: DrinkOrder;
-    elapsedSec: number;
-    remainingSec: number;
-    isPicky: boolean;
-  } | null;
+  getActiveOrder(): { order: DrinkOrder; elapsedSec: number; remainingSec: number; isPicky: boolean } | null;
   isOrderLocked(): boolean;
   lockOrder(staffName: string): boolean;
+  unlockOrder(): boolean;
   tryGreet(): boolean;
   setSpawning(enabled: boolean): void;
   resetForShift(): void;
   hasActiveCustomer(): boolean;
+  hasCustomerAtCounter(): boolean;
+  forceCustomerLeave(reason: GameEventReason, hitDir?: FallDir): boolean;
+  setComplaintBonusProvider(fn: ((cup: Cup) => number) | null): void;
 }
 
 type CustomerPhase = 'cooldown' | 'walking_in' | 'waiting' | 'walking_out';
@@ -76,6 +77,30 @@ export function createOrderManager(
   let greetedCurrent = false;
   let elapsedSec = 0;
   let lockedByStaff: string | undefined;
+  let complaintBonusProvider: ((cup: Cup) => number) | null = null;
+
+  const clearActiveOrder = (): boolean => {
+    const wasPicky = currentIsPicky;
+    currentOrder = null;
+    currentIsPicky = false;
+    lockedByStaff = undefined;
+    hooks.onGreetWindow?.(null);
+    onOrderChange(null);
+    phase = 'walking_out';
+    return wasPicky;
+  };
+
+  const pushOrderView = () => {
+    if (!currentOrder) return;
+    const remainingSec = Math.max(0, currentPatienceSec - elapsedSec);
+    onOrderChange({
+      order: currentOrder,
+      remainingSec,
+      ratio: remainingSec / currentPatienceSec,
+      lockedByStaff,
+      isPicky: currentIsPicky,
+    });
+  };
 
   const startCooldown = () => {
     phase = 'cooldown';
@@ -97,12 +122,7 @@ export function createOrderManager(
       greetedCurrent = false;
       lockedByStaff = undefined;
       hooks.onGreetWindow?.(GREET_WINDOW_SEC);
-      onOrderChange({
-        order: currentOrder,
-        remainingSec: currentPatienceSec,
-        ratio: 1,
-        isPicky: currentIsPicky,
-      });
+      pushOrderView();
     });
   };
 
@@ -114,26 +134,31 @@ export function createOrderManager(
     return { text: `+${formatted}đ · ${score.stars} sao`, positive: true };
   };
 
+  const failActiveOrder = (reason: GameEventReason, resultText: string, knockDown?: { hitDir?: FallDir }): boolean => {
+    if (phase !== 'waiting' || !currentOrder) return false;
+    const wasPicky = clearActiveOrder();
+    bus.emit('orderFailed', { reason });
+    if (wasPicky) hooks.onPickyFinished?.();
+    onOrderResult(resultText, false);
+    customer.leaveAlong(EXIT_WAYPOINTS, startCooldown, knockDown ? { fall: true, hitDir: knockDown.hitDir } : undefined);
+    return true;
+  };
+
   const finishDelivery = (cup: Cup): boolean => {
     if (phase !== 'waiting' || !currentOrder) return false;
     const deliveredOrder = currentOrder;
-    const wasPicky = currentIsPicky;
     const score = scoreDrink(deliveredOrder, cup, elapsedSec, currentPatienceSec);
     if (score.payout > 0) {
       const prev = gameStore.getState();
       gameStore.updateState({ money: prev.money + score.payout });
     }
     bus.emit('orderServed', { score, elapsed: elapsedSec, payout: score.payout });
+    const complaintBonus = complaintBonusProvider ? complaintBonusProvider(cup) : 0;
+    const wasPicky = clearActiveOrder();
     if (wasPicky) hooks.onPickyFinished?.();
-    hooks.onOrderDelivered?.(deliveredOrder, score, score.payout);
-    hooks.onGreetWindow?.(null);
+    hooks.onOrderDelivered?.(deliveredOrder, score, score.payout, complaintBonus);
     const res = formatResult(score);
     onOrderResult(res.text, res.positive);
-    currentOrder = null;
-    currentIsPicky = false;
-    lockedByStaff = undefined;
-    onOrderChange(null);
-    phase = 'walking_out';
     customer.leaveAlong(EXIT_WAYPOINTS, startCooldown);
     return true;
   };
@@ -161,6 +186,25 @@ export function createOrderManager(
       return phase !== 'cooldown';
     },
 
+    hasCustomerAtCounter() {
+      return phase === 'waiting' && currentOrder !== null;
+    },
+
+    forceCustomerLeave(reason, hitDir) {
+      if (phase === 'walking_in') {
+        const wasPicky = clearActiveOrder();
+        if (wasPicky) hooks.onPickyFinished?.();
+        onOrderResult('Khách giận bỏ đi!', false);
+        customer.leaveAlong([EXIT_WAYPOINTS[1]], startCooldown, { fall: true, hitDir });
+        return true;
+      }
+      return failActiveOrder(reason, 'Khách bỏ đi!', { hitDir });
+    },
+
+    setComplaintBonusProvider(fn) {
+      complaintBonusProvider = fn;
+    },
+
     getActiveOrder() {
       if (phase !== 'waiting' || !currentOrder) return null;
       return {
@@ -176,12 +220,7 @@ export function createOrderManager(
     },
 
     tryGreet() {
-      if (
-        phase !== 'waiting' ||
-        !currentOrder ||
-        greetedCurrent ||
-        elapsedSec > GREET_WINDOW_SEC
-      ) {
+      if (phase !== 'waiting' || !currentOrder || greetedCurrent || elapsedSec > GREET_WINDOW_SEC) {
         return false;
       }
       greetedCurrent = true;
@@ -193,14 +232,14 @@ export function createOrderManager(
     lockOrder(staffName) {
       if (phase !== 'waiting' || !currentOrder || lockedByStaff) return false;
       lockedByStaff = staffName;
-      const remainingSec = Math.max(0, currentPatienceSec - elapsedSec);
-      onOrderChange({
-        order: currentOrder,
-        remainingSec,
-        ratio: remainingSec / currentPatienceSec,
-        lockedByStaff,
-        isPicky: currentIsPicky,
-      });
+      pushOrderView();
+      return true;
+    },
+
+    unlockOrder() {
+      if (!lockedByStaff) return false;
+      lockedByStaff = undefined;
+      if (phase === 'waiting') pushOrderView();
       return true;
     },
 
@@ -224,28 +263,10 @@ export function createOrderManager(
         !greetedCurrent && elapsedSec <= GREET_WINDOW_SEC ? GREET_WINDOW_SEC - elapsedSec : null;
       hooks.onGreetWindow?.(greetLeft);
 
-      const remainingSec = Math.max(0, currentPatienceSec - elapsedSec);
-      const ratio = remainingSec / currentPatienceSec;
-      onOrderChange({
-        order: currentOrder,
-        remainingSec,
-        ratio,
-        lockedByStaff,
-        isPicky: currentIsPicky,
-      });
+      pushOrderView();
 
       if (elapsedSec >= currentPatienceSec) {
-        const wasPicky = currentIsPicky;
-        currentOrder = null;
-        currentIsPicky = false;
-        lockedByStaff = undefined;
-        hooks.onGreetWindow?.(null);
-        onOrderChange(null);
-        phase = 'walking_out';
-        bus.emit('orderFailed', { reason: 'Hết thời gian chờ' });
-        if (wasPicky) hooks.onPickyFinished?.();
-        onOrderResult('Khách hết kiên nhẫn và bỏ đi!', false);
-        customer.leaveAlong(EXIT_WAYPOINTS, startCooldown);
+        failActiveOrder('Hết thời gian chờ', 'Khách hết kiên nhẫn và bỏ đi!');
       }
     },
 

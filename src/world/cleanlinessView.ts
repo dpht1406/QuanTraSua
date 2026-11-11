@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { InteractionSystem } from '../interaction/interactionSystem.ts';
-import { CLEAN_HOLD_SEC } from '../state/constants.ts';
 import type { CleanlinessStore } from '../state/cleanliness.ts';
 import { PALETTE } from '../styles/palette.ts';
 import { makeBox, makeCylinder } from './furniture.ts';
@@ -52,37 +51,18 @@ function buildTrashOverflow(): THREE.Group {
   return group;
 }
 
-// Đồng bộ hiển thị 3D các vết bẩn sàn, bàn bẩn, thùng rác đầy và gắn tương tác giữ E để dọn
+// Đồng bộ hiển thị 3D các vết bẩn sàn, bàn bẩn và thùng rác đầy
 export function createCleanlinessView(
   world: ShopWorld,
   cleanliness: CleanlinessStore,
-  interaction: InteractionSystem,
-  onNotify: (msg: string) => void,
+  _interaction: InteractionSystem,
+  _onNotify: (msg: string) => void,
 ): CleanlinessView {
   const stainMeshes = new Map<string, THREE.Group>();
 
-  const dirtyTableOverlays = world.tables.map((tableSet, idx) => {
+  const dirtyTableOverlays = world.tables.map((tableSet) => {
     const overlay = buildDirtyTableOverlay();
     tableSet.add(overlay);
-    const findDirtyId = () =>
-      cleanliness.getStains().find((s) => s.kind === 'dirty_table' && s.tableIndex === idx)?.id;
-
-    // shortcut: dùng dụng cụ lau mặc định khi giữ E vào vết bẩn/bàn bẩn, không cần nhặt chổi
-    interaction.register({
-      target: tableSet,
-      label: () => (findDirtyId() ? `Lau bàn bẩn số ${idx + 1}` : `Kiểm tra bàn ${idx + 1}`),
-      holdSec: () => (findDirtyId() ? CLEAN_HOLD_SEC.dirty_table : 0),
-      onInteract() {
-        const id = findDirtyId();
-        if (!id) {
-          onNotify(`Bàn số ${idx + 1} sạch sẽ!`);
-          return;
-        }
-        cleanliness.cleanStain(id);
-        sync();
-        onNotify(`Đã lau sạch bàn số ${idx + 1}!`);
-      },
-    });
     return overlay;
   });
 
@@ -102,22 +82,10 @@ export function createCleanlinessView(
       mesh.position.set(stain.x, 0, stain.z);
       world.root.add(mesh);
       stainMeshes.set(stain.id, mesh);
-
-      interaction.register({
-        target: mesh,
-        label: stain.kind === 'spill' ? 'Lau vết đổ trên sàn' : 'Dọn rác trên sàn',
-        holdSec: CLEAN_HOLD_SEC[stain.kind],
-        onInteract() {
-          cleanliness.cleanStain(stain.id);
-          sync();
-          onNotify(stain.kind === 'spill' ? 'Đã lau sạch vết đổ!' : 'Đã dọn rác trên sàn!');
-        },
-      });
     }
 
     for (const [id, mesh] of stainMeshes) {
       if (activeFloorIds.has(id)) continue;
-      interaction.unregister(mesh);
       mesh.removeFromParent();
       stainMeshes.delete(id);
     }
@@ -135,7 +103,6 @@ export function createCleanlinessView(
     sync,
     dispose() {
       for (const [, mesh] of stainMeshes) {
-        interaction.unregister(mesh);
         mesh.removeFromParent();
       }
       stainMeshes.clear();

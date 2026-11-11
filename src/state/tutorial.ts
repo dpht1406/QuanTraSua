@@ -42,7 +42,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
   {
     id: 'clean_stain',
     title: 'Dọn một vết bẩn',
-    instruction: 'Tìm vết đổ trên sàn hoặc bàn bẩn, giữ E để lau dọn sạch sẽ.',
+    instruction: 'Nhấn E lấy chổi/cây lau ở giá tường, rồi giữ chuột vào vết bẩn hoặc bàn bẩn để dọn.',
     optional: false,
   },
   {

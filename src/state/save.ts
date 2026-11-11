@@ -1,14 +1,23 @@
-import { calcCleanliness, DEFAULT_TABLE_SLOTS, type CleanlinessStore, type StainItem, type StainKind } from './cleanliness.ts';
-import { MAX_STAFF, MAX_STAINS, SHIFT_START_HOUR, STAFF_CANDIDATES } from './constants.ts';
+import { calcCleanliness, type CleanlinessStore, type StainItem } from './cleanliness.ts';
+import { SHIFT_START_HOUR } from './constants.ts';
 import type { EventBus } from './eventBus.ts';
 import { DEFAULT_GAME_STATE, type GameEvents, type GameState } from './gameState.ts';
-import { createInitialStock, INVENTORY_ITEMS, type InventoryStock } from './inventory.ts';
+import { createHands } from './hands.ts';
+import {
+  createInitialContamination,
+  createInitialStock,
+  type InventoryContamination,
+  type InventoryStock,
+} from './inventory.ts';
 import { clampReputation } from './reputation.ts';
+import { deserializeSave, SAVE_VERSION, type SaveData } from './saveValidation.ts';
 import { createEmptyShiftStats, formatGameTime, type ShiftState } from './shift.ts';
 import type { StaffMember, StaffStore } from './staff.ts';
+import { createToolLocations } from './toolLocations.ts';
+
+export { deserializeSave, SAVE_VERSION, type SaveData };
 
 export const SAVE_KEY = 'quantrasua.save';
-export const SAVE_VERSION = 1;
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -16,21 +25,10 @@ export interface StorageLike {
   removeItem(key: string): void;
 }
 
-export interface SaveData {
-  version: number;
-  money: number;
-  day: number;
-  reputation: number;
-  wageDebt: number;
-  inventory: InventoryStock;
-  staffIds: string[];
-  stains: StainItem[];
-  tutorialDone: boolean;
-}
-
 export interface SaveSnapshotInput {
   state: GameState;
   inventory: InventoryStock;
+  contamination?: InventoryContamination;
   staff: readonly StaffMember[];
   stains: readonly StainItem[];
   tutorialDone: boolean;
@@ -41,10 +39,6 @@ export interface LoadSaveResult {
   storageError: boolean;
   invalidData: boolean;
 }
-
-const VALID_KINDS = new Set<StainKind>(['spill', 'trash', 'dirty_table', 'full_trash']);
-const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
-const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 export function createDefaultSaveData(tutorialDone = false): SaveData {
   return {
@@ -60,15 +54,20 @@ export function createDefaultSaveData(tutorialDone = false): SaveData {
   };
 }
 
+// Trả về bảng độ nhiễm đầy đủ (0..100, thiếu thì mặc định 0) từ dữ liệu save
+export function resolveSaveContamination(save: SaveData | null | undefined): InventoryContamination {
+  return createInitialContamination(save?.contamination);
+}
+
 // shortcut: chỉ lưu trạng thái giữa các ca (closed/summary) nên refresh giữa ca sẽ làm lại ca đó từ lần lưu cuối; nâng cấp sau bằng snapshot giữa ca nếu cần
 export function canSaveForShift(shiftState: ShiftState): boolean {
   return shiftState === 'closed' || shiftState === 'summary';
 }
 
 // Tạo dữ liệu lưu từ trạng thái hiện tại (nếu vừa tổng kết xong thì lưu sẵn sang ngày kế)
-export function buildSaveData({ state, inventory, staff, stains, tutorialDone }: SaveSnapshotInput): SaveData {
+export function buildSaveData({ state, inventory, contamination, staff, stains, tutorialDone }: SaveSnapshotInput): SaveData {
   const nextDay = state.shiftState === 'summary' ? state.day + 1 : state.day;
-  return {
+  const data: SaveData = {
     version: SAVE_VERSION,
     money: Math.max(0, Math.round(state.money)),
     day: Math.max(1, Math.floor(nextDay)),
@@ -79,98 +78,12 @@ export function buildSaveData({ state, inventory, staff, stains, tutorialDone }:
     stains: stains.map((s) => ({ ...s })),
     tutorialDone,
   };
+  if (contamination) data.contamination = createInitialContamination(contamination);
+  return data;
 }
 
 export function serializeSave(data: SaveData): string {
   return JSON.stringify(data);
-}
-
-function sanitizeStaffIds(raw: unknown): string[] | null {
-  if (!Array.isArray(raw)) return null;
-  const result: string[] = [];
-  const usedRoles = new Set<string>();
-  for (const id of raw) {
-    if (result.length >= MAX_STAFF) break;
-    if (typeof id !== 'string') continue;
-    const candidate = STAFF_CANDIDATES.find((c) => c.id === id);
-    if (!candidate || result.includes(candidate.id) || usedRoles.has(candidate.role)) continue;
-    usedRoles.add(candidate.role);
-    result.push(candidate.id);
-  }
-  return result;
-}
-
-function sanitizeStains(raw: unknown): StainItem[] | null {
-  if (!Array.isArray(raw)) return null;
-  const result: StainItem[] = [];
-  const usedIds = new Set<string>();
-  const usedTables = new Set<number>();
-  let hasFullTrash = false;
-
-  for (let i = 0; i < raw.length && result.length < MAX_STAINS; i++) {
-    const item = raw[i];
-    if (!isObj(item) || typeof item.kind !== 'string' || !VALID_KINDS.has(item.kind as StainKind)) continue;
-    if (!isNum(item.x) || !isNum(item.z) || !isNum(item.standX) || !isNum(item.standZ)) continue;
-
-    const kind = item.kind as StainKind;
-    let tableIndex: number | undefined;
-    if (kind === 'dirty_table') {
-      const ti = item.tableIndex;
-      if (!isNum(ti) || !Number.isInteger(ti) || ti < 0 || ti >= DEFAULT_TABLE_SLOTS.length || usedTables.has(ti)) continue;
-      tableIndex = ti;
-      usedTables.add(ti);
-    } else if (kind === 'full_trash') {
-      if (hasFullTrash) continue;
-      hasFullTrash = true;
-    }
-
-    let id = typeof item.id === 'string' && item.id.trim().length > 0 ? item.id : `stain_load_${i + 1}`;
-    if (usedIds.has(id)) id = `stain_load_${i + 1}_${result.length}`;
-    usedIds.add(id);
-
-    const stain: StainItem = { id, kind, x: item.x, z: item.z, standX: item.standX, standZ: item.standZ };
-    if (tableIndex !== undefined) stain.tableIndex = tableIndex;
-    result.push(stain);
-  }
-  return result;
-}
-
-// Giải mã JSON save và kiểm tra hợp lệ: sai cấu trúc/version -> null, ngoài biên hợp lý -> kẹp biên
-export function deserializeSave(rawJson: string): SaveData | null {
-  if (typeof rawJson !== 'string' || rawJson.trim().length === 0) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawJson);
-  } catch {
-    return null;
-  }
-
-  if (!isObj(parsed) || parsed.version !== SAVE_VERSION) return null;
-  if (!isNum(parsed.money) || !isNum(parsed.day) || !isNum(parsed.reputation) || !isNum(parsed.wageDebt)) return null;
-  if (typeof parsed.tutorialDone !== 'boolean' || !isObj(parsed.inventory)) return null;
-
-  const inventory = {} as InventoryStock;
-  for (const key of INVENTORY_ITEMS) {
-    const qty = parsed.inventory[key];
-    if (!isNum(qty)) return null;
-    inventory[key] = Math.max(0, Math.floor(qty));
-  }
-
-  const staffIds = sanitizeStaffIds(parsed.staffIds);
-  const stains = sanitizeStains(parsed.stains);
-  if (!staffIds || !stains) return null;
-
-  return {
-    version: SAVE_VERSION,
-    money: Math.max(0, Math.round(parsed.money)),
-    day: Math.max(1, Math.floor(parsed.day)),
-    reputation: clampReputation(parsed.reputation),
-    wageDebt: Math.max(0, Math.round(parsed.wageDebt)),
-    inventory,
-    staffIds,
-    stains,
-    tutorialDone: parsed.tutorialDone,
-  };
 }
 
 export function loadSave(storage: StorageLike | null | undefined): LoadSaveResult {
@@ -206,12 +119,13 @@ export function clearSave(storage: StorageLike | null | undefined): boolean {
   }
 }
 
-// Khôi phục dữ liệu save vào GameState, cửa hàng vết bẩn và nhân viên
+// Khôi phục dữ liệu save vào GameState, vết bẩn, nhân viên, đồng thời đặt tay rỗng và dụng cụ về giá
 export function applyLoadedSave(
   save: SaveData,
   store: { updateState(patch: Partial<GameState>): GameState },
   cleanliness: CleanlinessStore,
   staffStore: StaffStore,
+  inventory?: { restoreContamination(next?: Partial<InventoryContamination>): void },
 ): void {
   store.updateState({
     money: save.money,
@@ -222,9 +136,12 @@ export function applyLoadedSave(
     time: formatGameTime(SHIFT_START_HOUR * 60),
     shiftState: 'closed',
     shiftStats: createEmptyShiftStats(),
+    hands: createHands(),
+    tools: createToolLocations(),
   });
   cleanliness.restoreStains(save.stains);
   staffStore.restoreHired(save.staffIds);
+  inventory?.restoreContamination(save.contamination);
 }
 
 // Điều phối lưu tự động giữa các ca, giữ trạng thái tutorialDone và cảnh báo lỗi storage 1 lần
@@ -235,7 +152,13 @@ export function createSaveController(options: {
   onStorageError?: () => void;
 }) {
   let lastSaved: SaveData = options.initialSave
-    ? { ...options.initialSave, inventory: { ...options.initialSave.inventory }, staffIds: [...options.initialSave.staffIds], stains: options.initialSave.stains.map((s) => ({ ...s })) }
+    ? {
+        ...options.initialSave,
+        inventory: { ...options.initialSave.inventory },
+        ...(options.initialSave.contamination ? { contamination: { ...options.initialSave.contamination } } : {}),
+        staffIds: [...options.initialSave.staffIds],
+        stains: options.initialSave.stains.map((s) => ({ ...s })),
+      }
     : createDefaultSaveData(false);
   let warned = false;
 
@@ -280,7 +203,9 @@ export function createSaveController(options: {
   };
 }
 
-export function bindAutoSave(bus: EventBus<GameEvents>, saveCtrl: ReturnType<typeof createSaveController>): () => void {
+export type SaveController = ReturnType<typeof createSaveController>;
+
+export function bindAutoSave(bus: EventBus<GameEvents>, saveCtrl: SaveController): () => void {
   const unsubs = (['shiftClosed', 'staffHired', 'staffFired'] as const).map((ev) => bus.on(ev, () => saveCtrl.saveIfAllowed()));
   return () => unsubs.forEach((u) => u());
 }
