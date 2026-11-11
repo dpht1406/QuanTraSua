@@ -1,0 +1,10 @@
+/// <reference types="vite/client" />
+
+declare module 'node:assert/strict' {
+  const assert: {
+    equal<T>(actual: unknown, expected: T, message?: string): asserts actual is T;
+    deepEqual(actual: unknown, expected: unknown, message?: string): void;
+    ok(value: unknown, message?: string): asserts value;
+  };
+  export default assert;
+}
