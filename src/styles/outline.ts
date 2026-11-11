@@ -1,14 +1,24 @@
 import * as THREE from 'three';
+import { OUTLINE_ENABLED } from '../state/constantsGraphics.ts';
 import { PALETTE } from './palette.ts';
 
-const outlineMaterial = new THREE.MeshBasicMaterial({
-  color: PALETTE.outline,
-  side: THREE.BackSide,
-});
+let outlineMaterial: THREE.MeshBasicMaterial | null = null;
 
-// Thêm viền đen inverted hull cho mesh; BoxGeometry scale từng trục để giữ viền đều
-export function addOutline(mesh: THREE.Mesh, thickness = 0.014): THREE.Mesh {
-  const outline = new THREE.Mesh(mesh.geometry, outlineMaterial);
+function getOutlineMaterial(): THREE.MeshBasicMaterial {
+  if (!outlineMaterial) {
+    outlineMaterial = new THREE.MeshBasicMaterial({
+      color: PALETTE.outline,
+      side: THREE.BackSide,
+    });
+  }
+  return outlineMaterial;
+}
+
+// Thêm viền đen inverted hull cho mesh khi OUTLINE_ENABLED bật; GĐ8a mặc định no-op
+export function addOutline(mesh: THREE.Mesh, thickness = 0.014): THREE.Mesh | null {
+  if (!OUTLINE_ENABLED) return null;
+
+  const outline = new THREE.Mesh(mesh.geometry, getOutlineMaterial());
   outline.name = '__outline';
   outline.castShadow = false;
   outline.receiveShadow = false;

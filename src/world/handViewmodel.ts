@@ -4,8 +4,8 @@ import { getCatVariant } from '../state/catVariants.ts';
 import { PLAYER_CAT_VARIANT } from '../state/constantsCat.ts';
 import { HAND_PRIORITY } from '../state/constantsHands.ts';
 import type { HandId, HeldItemKind } from '../state/hands.ts';
+import { createMaterial, markShadow, type MaterialKind } from '../styles/materials.ts';
 import { addOutline } from '../styles/outline.ts';
-import { getToonMaterial } from '../styles/palette.ts';
 import { createHeldMesh } from './heldMeshes.ts';
 
 interface RestPose {
@@ -22,6 +22,7 @@ const UP_AXIS = new THREE.Vector3(0, 1, 0);
 const CUP_POSE: RestPose = { x: 0.26, y: -0.19, z: -0.45, rx: 0.08, ry: -0.25, rz: 0.04, scale: 1 };
 const TOOL_POSE: RestPose = { x: 0.30, y: -0.15, z: -0.55, rx: 0.35, ry: -0.22, rz: 0.14, scale: 0.45 };
 const SWING_SPEED = 11;
+const VIEWMODEL_EMISSIVE = 0.16;
 
 let viewRoot: THREE.Group | null = null;
 let slots: Record<HandId, THREE.Group> | null = null;
@@ -40,13 +41,14 @@ function addArmSegment(
   end: THREE.Vector3,
   rStart: number,
   rEnd: number,
+  kind: MaterialKind,
   color: number,
   outline: number,
 ): void {
   const dir = new THREE.Vector3().subVectors(end, start);
   const mesh = new THREE.Mesh(
     new THREE.CylinderGeometry(rEnd, rStart, dir.length(), 12),
-    getToonMaterial(color),
+    createMaterial(kind, color, { emissive: color, emissiveIntensity: VIEWMODEL_EMISSIVE }),
   );
   mesh.position.copy(start).addScaledVector(dir, 0.5);
   mesh.quaternion.setFromUnitVectors(UP_AXIS, dir.normalize());
@@ -65,12 +67,15 @@ function createCatHandRig(hand: HandId, kind: HeldItemKind): { root: THREE.Group
 
   const root = new THREE.Group();
   root.name = `catHand_${hand}`;
-  addArmSegment(root, pawPos, elbowPos, 0.03, 0.036, variant.furColor, 0.006);
-  addArmSegment(root, elbowPos, sleeveEndPos, 0.042, 0.05, variant.outfitColor, 0.006);
+  addArmSegment(root, pawPos, elbowPos, 0.03, 0.036, 'fur', variant.furColor, 0.006);
+  addArmSegment(root, elbowPos, sleeveEndPos, 0.042, 0.05, 'fabric', variant.outfitColor, 0.006);
 
   const pawGroup = new THREE.Group();
   pawGroup.position.copy(pawPos);
-  const paw = new THREE.Mesh(new THREE.SphereGeometry(0.043, 12, 10), getToonMaterial(variant.furColor));
+  const paw = new THREE.Mesh(
+    new THREE.SphereGeometry(0.043, 12, 10),
+    createMaterial('fur', variant.furColor, { emissive: variant.furColor, emissiveIntensity: VIEWMODEL_EMISSIVE }),
+  );
   paw.scale.set(0.95, 0.9, 1.05);
   paw.castShadow = false;
   paw.receiveShadow = false;
@@ -117,15 +122,10 @@ function syncHandSlot(hand: HandId, nextKind: HeldItemKind | null): void {
 
   if (!nextKind) return;
   const catHand = createCatHandRig(hand, nextKind);
-  const mesh = createHeldMesh(nextKind);
+  const mesh = createHeldMesh(nextKind, { castShadow: false, receiveShadow: false, viewmodel: true });
   mesh.scale.setScalar(getPose(nextKind).scale);
-  mesh.traverse((obj) => {
-    if ((obj as THREE.Mesh).isMesh) {
-      obj.castShadow = false;
-      obj.receiveShadow = false;
-    }
-  });
   catHand.palmAnchor.add(mesh);
+  markShadow(catHand.root, false, false);
   slot.add(catHand.root);
   applyRestPose(hand, slot, nextKind, 1);
 }

@@ -9,6 +9,7 @@ import {
   CAT_WALK_FREQ_MULT,
   CAT_WORK_FREQ_MULT,
 } from '../state/constantsCat.ts';
+import { markShadow } from '../styles/materials.ts';
 import { PALETTE } from '../styles/palette.ts';
 import { addCatPart, buildCatHead } from './catHead.ts';
 
@@ -62,15 +63,15 @@ function addBodyPatterns(
 function addBodyAccessory(accessory: CatAccessory, body: THREE.Group, shadow: boolean): void {
   if (accessory === 'bow') {
     for (const side of [-1, 1]) {
-      const wing = addCatPart(body, new THREE.BoxGeometry(0.07, 0.05, 0.03), CAT_BOW_COLOR, side * 0.045, 0.22, 0.172, 0.005, shadow);
+      const wing = addCatPart(body, new THREE.BoxGeometry(0.07, 0.05, 0.03), CAT_BOW_COLOR, side * 0.045, 0.22, 0.172, 0.005, shadow, 'fabric');
       wing.rotation.z = side * 0.25;
     }
-    addCatPart(body, new THREE.BoxGeometry(0.034, 0.036, 0.038), CAT_BOW_COLOR, 0, 0.22, 0.176, 0.005, shadow);
+    addCatPart(body, new THREE.BoxGeometry(0.034, 0.036, 0.038), CAT_BOW_COLOR, 0, 0.22, 0.176, 0.005, shadow, 'fabric');
     return;
   }
   if (accessory === 'scarf') {
-    addCatPart(body, new THREE.CylinderGeometry(0.182, 0.192, 0.075, 14), CAT_SCARF_COLOR, 0, 0.23, 0, 0.007, shadow);
-    const tail = addCatPart(body, new THREE.BoxGeometry(0.08, 0.16, 0.032), CAT_SCARF_COLOR, 0.06, 0.125, 0.185, 0.006, shadow);
+    addCatPart(body, new THREE.CylinderGeometry(0.182, 0.192, 0.075, 14), CAT_SCARF_COLOR, 0, 0.23, 0, 0.007, shadow, 'fabric');
+    const tail = addCatPart(body, new THREE.BoxGeometry(0.08, 0.16, 0.032), CAT_SCARF_COLOR, 0.06, 0.125, 0.185, 0.006, shadow, 'fabric');
     tail.rotation.set(-0.14, 0, -0.15);
   }
 }
@@ -89,17 +90,17 @@ export function createCat(variantId: CatVariantId, opts: CatModelOptions = {}): 
   // Thân nhỏ mặc áo + cổ áo + túi trước
   const body = new THREE.Group();
   body.position.set(0, 0.64, 0);
-  addCatPart(body, new THREE.CylinderGeometry(0.16, 0.21, 0.5, 14), outfitColor, 0, 0, 0, 0.011, shadow);
-  addCatPart(body, new THREE.CylinderGeometry(0.168, 0.168, 0.055, 14), PALETTE.creamWall, 0, 0.23, 0, 0.007, shadow);
-  addCatPart(body, new THREE.BoxGeometry(0.16, 0.13, 0.025), PALETTE.creamWall, 0, -0.04, 0.184, 0.005, shadow);
+  addCatPart(body, new THREE.CylinderGeometry(0.16, 0.21, 0.5, 14), outfitColor, 0, 0, 0, 0.011, shadow, 'fabric');
+  addCatPart(body, new THREE.CylinderGeometry(0.168, 0.168, 0.055, 14), PALETTE.creamWall, 0, 0.23, 0, 0.007, shadow, 'fabric');
+  addCatPart(body, new THREE.BoxGeometry(0.16, 0.13, 0.025), PALETTE.creamWall, 0, -0.04, 0.184, 0.005, shadow, 'fabric');
   root.add(body);
 
   // Hai chân (+X trái, -X phải theo hướng nhìn +Z); đáy bàn chân chạm đúng y = 0
   const makeLeg = (x: number): THREE.Group => {
     const leg = new THREE.Group();
     leg.position.set(x, 0.39, 0);
-    addCatPart(leg, new THREE.CylinderGeometry(0.068, 0.062, 0.33, 12), variant.furColor, 0, -0.165, 0, 0.009, shadow);
-    const paw = addCatPart(leg, new THREE.SphereGeometry(0.07, 12, 8), variant.furColor, 0, -0.35, 0.02, 0.008, shadow);
+    addCatPart(leg, new THREE.CylinderGeometry(0.068, 0.062, 0.33, 12), variant.furColor, 0, -0.165, 0, 0.009, shadow, 'fur');
+    const paw = addCatPart(leg, new THREE.SphereGeometry(0.07, 12, 8), variant.furColor, 0, -0.35, 0.02, 0.008, shadow, 'fur');
     paw.scale.set(0.95, 0.5714, 1.2);
     return leg;
   };
@@ -111,9 +112,9 @@ export function createCat(variantId: CatVariantId, opts: CatModelOptions = {}): 
   const makeArm = (x: number, anchorName: string): { arm: THREE.Group; anchor: THREE.Group } => {
     const arm = new THREE.Group();
     arm.position.set(x, 0.82, 0);
-    addCatPart(arm, new THREE.CylinderGeometry(0.062, 0.068, 0.1, 12), outfitColor, 0, -0.05, 0, 0.007, shadow);
-    addCatPart(arm, new THREE.CylinderGeometry(0.052, 0.048, 0.2, 12), variant.furColor, 0, -0.17, 0, 0.008, shadow);
-    addCatPart(arm, new THREE.SphereGeometry(0.062, 12, 10), variant.furColor, 0, -0.29, 0.01, 0.007, shadow);
+    addCatPart(arm, new THREE.CylinderGeometry(0.062, 0.068, 0.1, 12), outfitColor, 0, -0.05, 0, 0.007, shadow, 'fabric');
+    addCatPart(arm, new THREE.CylinderGeometry(0.052, 0.048, 0.2, 12), variant.furColor, 0, -0.17, 0, 0.008, shadow, 'fur');
+    addCatPart(arm, new THREE.SphereGeometry(0.062, 12, 10), variant.furColor, 0, -0.29, 0.01, 0.007, shadow, 'fur');
     const anchor = new THREE.Group();
     anchor.name = anchorName;
     anchor.position.set(0, -0.29, 0.05);
@@ -127,11 +128,11 @@ export function createCat(variantId: CatVariantId, opts: CatModelOptions = {}): 
   // Đuôi cong ở phía sau (-Z)
   const tail = new THREE.Group();
   tail.position.set(0, 0.46, -0.18);
-  addCatPart(tail, new THREE.CylinderGeometry(0.036, 0.038, 0.14, 10), variant.furColor, 0, 0.04, -0.05, 0.007, shadow).rotation.x = -0.85;
-  addCatPart(tail, new THREE.CylinderGeometry(0.036, 0.036, 0.14, 10), variant.furColor, 0, 0.13, -0.12, 0.007, shadow).rotation.x = -0.25;
-  addCatPart(tail, new THREE.CylinderGeometry(0.034, 0.036, 0.13, 10), variant.furColor, 0, 0.24, -0.13, 0.007, shadow).rotation.x = 0.35;
+  addCatPart(tail, new THREE.CylinderGeometry(0.036, 0.038, 0.14, 10), variant.furColor, 0, 0.04, -0.05, 0.007, shadow, 'fur').rotation.x = -0.85;
+  addCatPart(tail, new THREE.CylinderGeometry(0.036, 0.036, 0.14, 10), variant.furColor, 0, 0.13, -0.12, 0.007, shadow, 'fur').rotation.x = -0.25;
+  addCatPart(tail, new THREE.CylinderGeometry(0.034, 0.036, 0.13, 10), variant.furColor, 0, 0.24, -0.13, 0.007, shadow, 'fur').rotation.x = 0.35;
   const tailTipColor = variant.id === 'calico' ? variant.patchColor : variant.id === 'tabby' ? variant.furColor : variant.patchColor;
-  addCatPart(tail, new THREE.SphereGeometry(0.042, 10, 8), tailTipColor, 0, 0.3, -0.1, 0.007, shadow);
+  addCatPart(tail, new THREE.SphereGeometry(0.042, 10, 8), tailTipColor, 0, 0.3, -0.1, 0.007, shadow, 'fur');
   root.add(tail);
 
   addBodyPatterns(variant, body, tail, leftArm.arm, rightArm.arm, shadow);
@@ -139,6 +140,14 @@ export function createCat(variantId: CatVariantId, opts: CatModelOptions = {}): 
 
   const head = buildCatHead(variant, accessory, shadow);
   root.add(head);
+
+  // Mèo chỉ đổ bóng lên sàn/nội thất, không receiveShadow trên chính mình để tránh vệt tự bóng
+  markShadow(root, shadow, false);
+  root.traverse((obj) => {
+    if (obj instanceof THREE.Mesh && (obj.name === 'catEyeShine' || obj.name === 'catWhisker' || obj.name === 'catGlassLens')) {
+      obj.castShadow = false;
+    }
+  });
 
   return {
     root,

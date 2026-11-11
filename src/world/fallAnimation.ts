@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { createMaterial, markShadow } from '../styles/materials.ts';
+import { addOutline } from '../styles/outline.ts';
 import { PALETTE } from '../styles/palette.ts';
 import {
   computeFallDurations,
@@ -9,7 +11,6 @@ import {
   type FallDir,
   type FallPoseResult,
 } from './fallPose.ts';
-import { makeBox } from './furniture.ts';
 import type { Aabb3D } from './shopWorld.ts';
 
 export { fallPose, resolveFallDir, computeFallHitbox, type FallDir, type FallPoseResult };
@@ -20,15 +21,22 @@ const STAR_COLORS = [PALETTE.syrupPeach, PALETTE.creamTrim, PALETTE.syrupPeach, 
 function buildStunStars(): THREE.Group {
   const group = new THREE.Group();
   const radius = 0.24;
+  const starGeo = new THREE.BoxGeometry(0.075, 0.075, 0.075);
   for (let i = 0; i < STAR_COLORS.length; i++) {
     const angle = (i / STAR_COLORS.length) * Math.PI * 2;
-    const star = makeBox(0.075, 0.075, 0.075, STAR_COLORS[i], Math.cos(angle) * radius, 0, Math.sin(angle) * radius, 0.008);
+    const mat = createMaterial('plastic', STAR_COLORS[i], {
+      roughness: 0.35,
+      emissive: STAR_COLORS[i],
+      emissiveIntensity: 0.45,
+    });
+    const star = new THREE.Mesh(starGeo, mat);
+    star.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
     star.rotation.set(Math.PI / 4, angle, Math.PI / 4);
-    star.castShadow = false;
-    star.receiveShadow = false;
+    addOutline(star, 0.008);
     star.raycast = () => {};
     group.add(star);
   }
+  markShadow(group, false, false);
   return group;
 }
 

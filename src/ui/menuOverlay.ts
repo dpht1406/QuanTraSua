@@ -14,6 +14,7 @@ export interface MenuOverlayOptions {
 export interface MenuOverlay {
   setLocked(locked: boolean, suppressOverlay?: boolean): void;
   isOpen(): boolean;
+  getActionsContainer(): HTMLElement;
   dispose(): void;
 }
 
@@ -127,6 +128,10 @@ export function createMenuOverlay(
 
     isOpen() {
       return !overlay.classList.contains('hidden');
+    },
+
+    getActionsContainer() {
+      return actionsEl;
     },
 
     dispose() {

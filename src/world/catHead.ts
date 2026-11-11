@@ -13,8 +13,9 @@ import {
   CAT_MUZZLE_COLOR,
   CAT_NOSE_COLOR,
 } from '../state/constantsCat.ts';
+import { createMaterial, type CreateMaterialOptions, type MaterialKind } from '../styles/materials.ts';
 import { addOutline } from '../styles/outline.ts';
-import { getToonMaterial, PALETTE } from '../styles/palette.ts';
+import { PALETTE } from '../styles/palette.ts';
 
 const EAR_TILT_Z = 0.4;
 const EAR_TILT_X = 0.08;
@@ -22,7 +23,7 @@ const EAR_EMBED_RATIO = 0.28;
 const EAR_RADIUS = 0.114;
 const EAR_TIP_RADIUS = 0.026;
 
-// Tạo mesh toon kèm đổ bóng và viền đen inverted hull đồng bộ GĐ7
+// Tạo mesh vật liệu PBR pastel kèm đổ bóng và viền (khi OUTLINE_ENABLED bật)
 export function addCatPart(
   parent: THREE.Object3D,
   geo: THREE.BufferGeometry,
@@ -32,11 +33,13 @@ export function addCatPart(
   z: number,
   outline = 0.01,
   castShadow = true,
+  kind: MaterialKind = 'fur',
+  matOpts?: CreateMaterialOptions,
 ): THREE.Mesh {
-  const mesh = new THREE.Mesh(geo, getToonMaterial(color));
+  const mesh = new THREE.Mesh(geo, createMaterial(kind, color, matOpts));
   mesh.position.set(x, y, z);
   mesh.castShadow = castShadow;
-  mesh.receiveShadow = true;
+  mesh.receiveShadow = false;
   addOutline(mesh, outline);
   parent.add(mesh);
   return mesh;
@@ -95,22 +98,26 @@ function addHeadAccessory(
   shadow: boolean,
 ): void {
   if (accessory === 'hat') {
-    addCatPart(head, new THREE.CylinderGeometry(0.135, 0.148, 0.065, 14), CAT_HAT_COLOR, 0, ry - 0.005, 0.02, 0.007, shadow);
-    addCatPart(head, new THREE.BoxGeometry(0.18, 0.02, 0.1), CAT_HAT_COLOR, 0, ry - 0.032, 0.12, 0.006, shadow).rotation.x = 0.12;
+    addCatPart(head, new THREE.CylinderGeometry(0.135, 0.148, 0.065, 14), CAT_HAT_COLOR, 0, ry - 0.005, 0.02, 0.007, shadow, 'fabric');
+    addCatPart(head, new THREE.BoxGeometry(0.18, 0.02, 0.1), CAT_HAT_COLOR, 0, ry - 0.032, 0.12, 0.006, shadow, 'fabric').rotation.x = 0.12;
     return;
   }
   if (accessory === 'glasses') {
     const gz = eyeSurfaceZ + 0.026;
+    const frameOpts = { roughness: 0.34 };
+    const lensOpts = { opacity: 0.3 };
     for (const side of [-1, 1]) {
       const ex = side * eyeX;
-      addCatPart(head, new THREE.BoxGeometry(0.088, 0.012, 0.014), CAT_GLASSES_COLOR, ex, eyeY + 0.04, gz, 0.003, shadow);
-      addCatPart(head, new THREE.BoxGeometry(0.088, 0.012, 0.014), CAT_GLASSES_COLOR, ex, eyeY - 0.04, gz, 0.003, shadow);
-      addCatPart(head, new THREE.BoxGeometry(0.012, 0.088, 0.014), CAT_GLASSES_COLOR, ex - 0.04, eyeY, gz, 0.003, shadow);
-      addCatPart(head, new THREE.BoxGeometry(0.012, 0.088, 0.014), CAT_GLASSES_COLOR, ex + 0.04, eyeY, gz, 0.003, shadow);
-      const temple = addCatPart(head, new THREE.BoxGeometry(0.01, 0.012, 0.12), CAT_GLASSES_COLOR, side * (rx * 0.72), eyeY + 0.01, gz - 0.062, 0.003, shadow);
+      addCatPart(head, new THREE.BoxGeometry(0.088, 0.012, 0.014), CAT_GLASSES_COLOR, ex, eyeY + 0.04, gz, 0.003, shadow, 'plastic', frameOpts);
+      addCatPart(head, new THREE.BoxGeometry(0.088, 0.012, 0.014), CAT_GLASSES_COLOR, ex, eyeY - 0.04, gz, 0.003, shadow, 'plastic', frameOpts);
+      addCatPart(head, new THREE.BoxGeometry(0.012, 0.088, 0.014), CAT_GLASSES_COLOR, ex - 0.04, eyeY, gz, 0.003, shadow, 'plastic', frameOpts);
+      addCatPart(head, new THREE.BoxGeometry(0.012, 0.088, 0.014), CAT_GLASSES_COLOR, ex + 0.04, eyeY, gz, 0.003, shadow, 'plastic', frameOpts);
+      const lens = addCatPart(head, new THREE.BoxGeometry(0.068, 0.068, 0.004), PALETTE.glassBlue, ex, eyeY, gz, 0, false, 'glass', lensOpts);
+      lens.name = 'catGlassLens';
+      const temple = addCatPart(head, new THREE.BoxGeometry(0.01, 0.012, 0.12), CAT_GLASSES_COLOR, side * (rx * 0.72), eyeY + 0.01, gz - 0.062, 0.003, shadow, 'plastic', frameOpts);
       temple.rotation.y = side * -0.42;
     }
-    addCatPart(head, new THREE.BoxGeometry(0.036, 0.012, 0.014), CAT_GLASSES_COLOR, 0, eyeY + 0.013, gz + 0.002, 0.003, shadow);
+    addCatPart(head, new THREE.BoxGeometry(0.036, 0.012, 0.014), CAT_GLASSES_COLOR, 0, eyeY + 0.013, gz + 0.002, 0.003, shadow, 'plastic', frameOpts);
   }
 }
 
@@ -165,24 +172,31 @@ export function buildCatHead(
     const inner = addCatPart(ear, new THREE.CylinderGeometry(EAR_TIP_RADIUS * 0.45, EAR_RADIUS * 0.56, earHeight * 0.58, 8), CAT_INNER_EAR_COLOR, 0, -earHeight * 0.06, EAR_RADIUS * 0.38, 0.004, shadow);
     inner.name = side < 0 ? 'catInnerEarR' : 'catInnerEarL';
 
-    addCatPart(head, new THREE.BoxGeometry(0.046, 0.062, 0.028), PALETTE.outline, side * eyeX, eyeY, eyeSurfaceZ + 0.004, 0.003, shadow);
-    addCatPart(head, new THREE.BoxGeometry(0.014, 0.016, 0.01), CAT_EYE_SHINE_COLOR, side * eyeX + 0.008, eyeY + 0.014, eyeSurfaceZ + 0.018, 0.002, false);
+    const eye = addCatPart(head, new THREE.BoxGeometry(0.046, 0.062, 0.028), PALETTE.outline, side * eyeX, eyeY, eyeSurfaceZ + 0.004, 0.003, shadow, 'ceramic', { roughness: 0.12, metalness: 0.08 });
+    eye.name = 'catEye';
+    const shine = addCatPart(head, new THREE.BoxGeometry(0.014, 0.016, 0.01), CAT_EYE_SHINE_COLOR, side * eyeX + 0.008, eyeY + 0.014, eyeSurfaceZ + 0.018, 0.002, false, 'ceramic', {
+      roughness: 0.08,
+      emissive: CAT_EYE_SHINE_COLOR,
+      emissiveIntensity: 0.25,
+    });
+    shine.name = 'catEyeShine';
 
     for (const [wy, rzTilt] of [[-ry * 0.14, 0.1], [-ry * 0.24, -0.1]] as const) {
       const wx = side * rx * 0.72;
       const wz = ellipsoidFrontZ(wx, wy, rx, ry, rz) + 0.014;
-      const whisker = addCatPart(head, new THREE.BoxGeometry(0.085, 0.009, 0.009), PALETTE.outline, wx, wy, wz, 0.002, false);
+      const whisker = addCatPart(head, new THREE.BoxGeometry(0.085, 0.009, 0.009), PALETTE.outline, wx, wy, wz, 0.002, false, 'plastic', { roughness: 0.55 });
+      whisker.name = 'catWhisker';
       whisker.rotation.set(0, -side * 0.25, side * rzTilt);
     }
   }
 
   const muzzleY = -ry * 0.2;
   const muzzleZ = ellipsoidFrontZ(0, muzzleY, rx, ry, rz) - 0.018;
-  const muzzle = addCatPart(head, new THREE.SphereGeometry(0.066, 12, 8), CAT_MUZZLE_COLOR, 0, muzzleY, muzzleZ, 0.005, shadow);
+  const muzzle = addCatPart(head, new THREE.SphereGeometry(0.066, 12, 8), CAT_MUZZLE_COLOR, 0, muzzleY, muzzleZ, 0.005, shadow, 'fur');
   muzzle.name = 'catMuzzle';
   muzzle.scale.set(1.28, 0.8, 0.58);
 
-  const nose = addCatPart(head, new THREE.BoxGeometry(0.034, 0.024, 0.022), CAT_NOSE_COLOR, 0, muzzleY + 0.024, muzzleZ + 0.036, 0.003, shadow);
+  const nose = addCatPart(head, new THREE.BoxGeometry(0.034, 0.024, 0.022), CAT_NOSE_COLOR, 0, muzzleY + 0.024, muzzleZ + 0.036, 0.003, shadow, 'plastic', { roughness: 0.32 });
   nose.name = 'catNose';
 
   addHeadPatterns(variant, head, rx, ry, rz, shadow);

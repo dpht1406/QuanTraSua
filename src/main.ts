@@ -2,7 +2,14 @@ import './style.css';
 import './ui/gameplayHud.css';
 import './ui/panels.css';
 import './ui/staffPanel.css';
-import { bindGameInput, createShopPanels, initPlayerAvatar, initStoresAndSave } from './core/bootstrap.ts';
+import {
+  bindGameInput,
+  createShopPanels,
+  getSafeLocalStorage,
+  initGraphicsUi,
+  initPlayerAvatar,
+  initStoresAndSave,
+} from './core/bootstrap.ts';
 import { startGameLoop } from './core/gameLoop.ts';
 import { createInput } from './core/input.ts';
 import { createSceneSetup } from './core/sceneSetup.ts';
@@ -17,6 +24,7 @@ import { initStationLookup } from './gameplay/stationLookup.ts';
 import { createInteractionSystem } from './interaction/interactionSystem.ts';
 import { createFirstPersonController } from './player/firstPersonController.ts';
 import { gameStore } from './state/gameState.ts';
+import { loadGraphicsQuality } from './state/graphicsQuality.ts';
 import { createHeldCupView } from './ui/heldCup.ts';
 import { createHud } from './ui/hud.ts';
 import { createLevelPicker } from './ui/levelPicker.ts';
@@ -30,7 +38,8 @@ function bootstrap() {
   const app = document.getElementById('app');
   if (!app) throw new Error('Không tìm thấy phần tử #app');
 
-  const { scene, camera, renderer, setDimmed } = createSceneSetup(app);
+  const initialQuality = loadGraphicsQuality(getSafeLocalStorage());
+  const { scene, camera, renderer, lighting, setDimmed } = createSceneSetup(app, { initialQuality });
   const input = createInput();
 
   let cleanlinessView: ReturnType<typeof createCleanlinessView> | null = null;
@@ -110,6 +119,14 @@ function bootstrap() {
       hud.setRelockVisible(false);
       player.lock();
     },
+  });
+
+  const { fpsMeter } = initGraphicsUi(app, panels.menu, {
+    renderer,
+    lighting,
+    storage,
+    initialQuality,
+    onLowFpsHint: (message) => gameStore.bus.emit('toast:show', { message }),
   });
 
   shiftManager = createShiftManager(
@@ -204,6 +221,7 @@ function bootstrap() {
     scene,
     camera,
     renderer,
+    lighting,
     player,
     input,
     interaction,
@@ -233,6 +251,8 @@ function bootstrap() {
   initPhase6Modules(ctx);
 
   startGameLoop(scene, camera, renderer, (dt) => {
+    fpsMeter.update();
+    lighting.update?.(dt);
     player.update(dt);
     playerAvatar.update(dt);
     if (player.isLocked()) {

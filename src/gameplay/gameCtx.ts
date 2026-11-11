@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import type { InputState } from '../core/input.ts';
+import type { LightingController } from '../core/lighting.ts';
 import type { InteractionSystem } from '../interaction/interactionSystem.ts';
 import type { AabbBox } from '../player/collision.ts';
 import type { FirstPersonController } from '../player/firstPersonController.ts';
@@ -29,6 +30,7 @@ export interface GameCtx {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
+  lighting: LightingController;
   player: FirstPersonController;
   input: InputState;
   interaction: InteractionSystem;

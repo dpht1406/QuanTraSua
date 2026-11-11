@@ -1,15 +1,19 @@
 import type * as THREE from 'three';
 import type { InputState } from './input.ts';
+import type { LightingController } from './lighting.ts';
 import type { DrinkStationController } from '../gameplay/drinkStations.ts';
 import type { OrderManager } from '../gameplay/orderManager.ts';
 import type { ShiftManager } from '../gameplay/shiftManager.ts';
 import { createCleanlinessStore } from '../state/cleanliness.ts';
 import { gameStore } from '../state/gameState.ts';
+import type { GraphicsQuality } from '../state/graphicsQuality.ts';
 import { createInventoryStore, purchaseRestockCart } from '../state/inventory.ts';
 import { applyLoadedSave, bindAutoSave, createSaveController, loadSave, type StorageLike } from '../state/save.ts';
 import { createStaffStore } from '../state/staff.ts';
 import { createTutorialController, TUTORIAL_SKIP_KEY } from '../state/tutorial.ts';
-import { createMenuOverlay } from '../ui/menuOverlay.ts';
+import { createFpsMeter } from '../ui/fpsMeter.ts';
+import { createGraphicsSettingsControl } from '../ui/graphicsSettings.ts';
+import { createMenuOverlay, type MenuOverlay } from '../ui/menuOverlay.ts';
 import { createRestockPanel } from '../ui/restockPanel.ts';
 import { createShiftSummaryView } from '../ui/shiftSummary.ts';
 import { createStaffPanel } from '../ui/staffPanel.ts';
@@ -46,7 +50,7 @@ export function initPlayerAvatar(
   };
 }
 
-function getSafeLocalStorage(): StorageLike | null {
+export function getSafeLocalStorage(): StorageLike | null {
   try {
     return window.localStorage;
   } catch {
@@ -192,4 +196,32 @@ export function createShopPanels(
   });
 
   return { restockPanel, staffPanel, shiftSummary, menu };
+}
+
+// Khởi tạo nút chọn chất lượng đồ họa trong menu và công cụ đo FPS (F3)
+export function initGraphicsUi(
+  app: HTMLElement,
+  menu: MenuOverlay,
+  deps: {
+    renderer: THREE.WebGLRenderer;
+    lighting: Pick<LightingController, 'setQuality'>;
+    storage: StorageLike | null | undefined;
+    initialQuality: GraphicsQuality;
+    onLowFpsHint: (message: string) => void;
+  },
+) {
+  const fpsMeter = createFpsMeter(app, {
+    initialQuality: deps.initialQuality,
+    onLowFpsHint: deps.onLowFpsHint,
+  });
+
+  const graphicsSettings = createGraphicsSettingsControl(menu.getActionsContainer(), {
+    renderer: deps.renderer,
+    lighting: deps.lighting,
+    storage: deps.storage,
+    initialQuality: deps.initialQuality,
+    onQualityChange: (q) => fpsMeter.setQuality(q),
+  });
+
+  return { fpsMeter, graphicsSettings };
 }

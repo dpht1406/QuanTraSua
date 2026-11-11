@@ -1,13 +1,10 @@
 import * as THREE from 'three';
 import type { Interactable } from '../interaction/interactionSystem.ts';
 import type { AabbBox } from '../player/collision.ts';
-import { addOutline } from '../styles/outline.ts';
-import { createGlassMaterial, getToonMaterial, PALETTE } from '../styles/palette.ts';
 import {
   buildCounter,
   buildCupRack,
   buildCupSealer,
-  buildDoor,
   buildFridge,
   buildMenuBoard,
   buildMopSet,
@@ -17,8 +14,8 @@ import {
   buildTableSet,
   buildTeaMachine,
   buildTrashCan,
-  makeBox,
 } from './furniture.ts';
+import { buildShopShell } from './shopShell.ts';
 
 export interface Aabb3D extends AabbBox {
   minY: number;
@@ -79,66 +76,7 @@ export function createShopWorld(onNotify: (msg: string) => void): ShopWorld {
     });
   };
 
-  // Sàn 10x8m (x: -5..5, z: -4..4) và viền nền pastel
-  const floor = new THREE.Mesh(
-    new THREE.BoxGeometry(10.2, 0.1, 8.2),
-    getToonMaterial(PALETTE.floorLight),
-  );
-  floor.position.set(0, -0.05, 0);
-  floor.receiveShadow = true;
-  root.add(floor);
-
-  const areaMat = makeBox(5.2, 0.01, 3.0, PALETTE.floorAccent, -1.8, 0.005, -2.4, 0);
-  areaMat.castShadow = false;
-  root.add(areaMat);
-
-  // Trần sáng và 3 đèn thả trần hình cầu
-  const ceiling = makeBox(10.4, 0.12, 8.4, PALETTE.creamTrim, 0, 3.46, 0, 0);
-  ceiling.castShadow = false;
-  root.add(ceiling);
-
-  const lampGeo = new THREE.SphereGeometry(0.16, 16, 12);
-  for (const [lx, lz] of [
-    [-1.8, -1.5],
-    [2.8, -0.5],
-    [2.8, 2.0],
-  ]) {
-    root.add(makeBox(0.03, 0.55, 0.03, PALETTE.teaDark, lx, 3.12, lz, 0.006));
-    const globe = new THREE.Mesh(lampGeo, getToonMaterial(PALETTE.pinkSoft));
-    globe.position.set(lx, 2.75, lz);
-    addOutline(globe, 0.012);
-    root.add(globe);
-  }
-
-  // 4 bức tường bao quanh 10x8m (tường trước chừa ô cửa 1.44m và 2 cửa sổ)
-  root.add(makeBox(10.4, 3.4, 0.2, PALETTE.creamWall, 0, 1.7, -4.1, 0.014));
-  root.add(makeBox(0.2, 3.4, 8.0, PALETTE.creamWall, -5.1, 1.7, 0, 0.014));
-  root.add(makeBox(0.2, 3.4, 8.0, PALETTE.creamWall, 5.1, 1.7, 0, 0.014));
-  root.add(makeBox(4.48, 3.4, 0.2, PALETTE.creamWall, -2.96, 1.7, 4.1, 0.014));
-  root.add(makeBox(4.48, 3.4, 0.2, PALETTE.creamWall, 2.96, 1.7, 4.1, 0.014));
-  root.add(makeBox(1.44, 1.02, 0.2, PALETTE.creamWall, 0, 2.89, 4.1, 0.014));
-
-  const frontWindowMat = createGlassMaterial(PALETTE.glassBlue, 0.35);
-  for (const wx of [-3.0, 3.0]) {
-    const win = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.3, 0.24), frontWindowMat);
-    win.position.set(wx, 1.55, 4.1);
-    addOutline(win, 0.012);
-    root.add(win);
-  }
-
-  const wallBoxes: AabbBox[] = [
-    { minX: -5.2, maxX: 5.2, minZ: -4.2, maxZ: -4.0 },
-    { minX: -5.2, maxX: -5.0, minZ: -4.2, maxZ: 4.2 },
-    { minX: 5.0, maxX: 5.2, minZ: -4.2, maxZ: 4.2 },
-    { minX: -5.2, maxX: 5.2, minZ: 4.0, maxZ: 4.2 },
-  ];
-  colliders.push(...wallBoxes);
-  wallBoxes.forEach((b) => pushSurface(b, 3.4, 'wall'));
-
-  // Cửa ra vào (nối với hệ thống mở/kết ca)
-  const door = buildDoor();
-  door.position.set(0, 0, 4.1);
-  root.add(door);
+  const door = buildShopShell(root, colliders, pushSurface);
 
   // Máy tính nhập hàng đặt cạnh kệ nguyên liệu ở tường sau
   const restockPc = buildRestockPc();

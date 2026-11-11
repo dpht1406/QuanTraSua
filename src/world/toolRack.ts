@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import type { GameCtx } from '../gameplay/gameCtx.ts';
 import type { AabbBox } from '../player/collision.ts';
 import type { ToolKind, ToolLocations } from '../state/toolLocations.ts';
+import { markShadow } from '../styles/materials.ts';
 import { PALETTE } from '../styles/palette.ts';
-import { makeBox } from './furniture.ts';
+import { makePartBox } from './furniturePrimitives.ts';
 import { createHeldMesh } from './heldMeshes.ts';
 
 export interface ToolRack {
@@ -24,10 +25,14 @@ const SLOT_X: Record<ToolKind, number> = { broom: -0.19, mop: 0.19 };
 function buildSlotGroup(x: number, badgeColor: number): THREE.Group {
   const slot = new THREE.Group();
   slot.position.set(x, 0, 0);
-  slot.add(makeBox(0.35, 1.08, 0.02, PALETTE.creamWall, 0, 1.03, 0.01, 0.008));
-  slot.add(makeBox(0.24, 0.07, 0.02, badgeColor, 0, 1.56, 0.045, 0.006));
-  slot.add(makeBox(0.025, 0.04, 0.09, PALETTE.teaDark, -0.042, 1.46, 0.065, 0.006));
-  slot.add(makeBox(0.025, 0.04, 0.09, PALETTE.teaDark, 0.042, 1.46, 0.065, 0.006));
+  slot.add(makePartBox(0.35, 1.08, 0.02, 'paint', PALETTE.creamWall, 0, 1.03, 0.01, {
+    outline: 0.008,
+    castShadow: false,
+    receiveShadow: true,
+  }));
+  slot.add(makePartBox(0.24, 0.07, 0.02, 'plastic', badgeColor, 0, 1.56, 0.045, { outline: 0.006 }));
+  slot.add(makePartBox(0.025, 0.04, 0.09, 'metal', PALETTE.teaDark, -0.042, 1.46, 0.065, { outline: 0.006 }));
+  slot.add(makePartBox(0.025, 0.04, 0.09, 'metal', PALETTE.teaDark, 0.042, 1.46, 0.065, { outline: 0.006 }));
   return slot;
 }
 
@@ -35,7 +40,7 @@ function buildSlotGroup(x: number, badgeColor: number): THREE.Group {
 export function createToolRack(ctx: GameCtx, handlers: ToolRackHandlers): ToolRack {
   const root = new THREE.Group();
   root.position.set(RACK_POS.x, RACK_POS.y, RACK_POS.z);
-  root.add(makeBox(0.78, 0.14, 0.04, PALETTE.teaDark, 0, 1.56, 0.02, 0.01));
+  root.add(makePartBox(0.78, 0.14, 0.04, 'wood', PALETTE.teaDark, 0, 1.56, 0.02, { outline: 0.01 }));
 
   const broomSlot = buildSlotGroup(SLOT_X.broom, PALETTE.pinkBlush);
   const mopSlot = buildSlotGroup(SLOT_X.mop, PALETTE.matchaGreen);
@@ -43,8 +48,10 @@ export function createToolRack(ctx: GameCtx, handlers: ToolRackHandlers): ToolRa
 
   const broomMesh = createHeldMesh('broom');
   broomMesh.position.set(SLOT_X.broom, 0.94, 0.095);
+  markShadow(broomMesh, true, true);
   const mopMesh = createHeldMesh('mop');
   mopMesh.position.set(SLOT_X.mop, 0.94, 0.095);
+  markShadow(mopMesh, true, true);
   root.add(broomMesh, mopMesh);
 
   ctx.scene.add(root);

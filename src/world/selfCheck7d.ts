@@ -97,7 +97,7 @@ export function runSelfCheck7d(): void {
   rightHand.traverse((obj) => {
     if (obj instanceof THREE.Mesh && obj.name !== '__outline') {
       assert.equal(obj.castShadow, false);
-      const mat = obj.material as THREE.MeshToonMaterial;
+      const mat = obj.material as THREE.MeshStandardMaterial;
       if (mat.color) colors.add(mat.color.getHex());
     }
   });

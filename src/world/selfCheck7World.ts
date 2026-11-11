@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { createInteractionSystem } from '../interaction/interactionSystem.ts';
 import { CAT_VARIANTS } from '../state/catVariants.ts';
 import { CAT_BASE_HEIGHT } from '../state/constantsCat.ts';
+import { OUTLINE_ENABLED } from '../state/constantsGraphics.ts';
 import { FALL_DOWN_SEC } from '../state/constantsThrow.ts';
+import { createMaterial } from '../styles/materials.ts';
 import { animateCat, createCat } from './catModel.ts';
 import { createCustomerActor } from './customer.ts';
 import { createPlayerAvatar } from './playerAvatar.ts';
@@ -86,7 +88,8 @@ function runCatModelAndCustomerChecks(): void {
         else meshCount++;
       }
     });
-    assert.ok(meshCount > 0 && outlineCount === meshCount, `${variant.id} thiếu outline`);
+    const expectedOutlines = OUTLINE_ENABLED ? meshCount : 0;
+    assert.ok(meshCount > 0 && outlineCount === expectedOutlines, `${variant.id} sai số lượng outline`);
 
     rig.root.position.set(1, 0, 2);
     rig.root.rotation.set(0.1, 0.5, 0.2);
@@ -130,7 +133,7 @@ function runCatModelAndCustomerChecks(): void {
     const hexes: number[] = [];
     customer.root.traverse((obj) => {
       if (obj instanceof THREE.Mesh && obj.name !== '__outline') {
-        hexes.push((obj.material as THREE.MeshToonMaterial).color.getHex());
+        hexes.push((obj.material as THREE.MeshStandardMaterial).color.getHex());
       }
     });
     return hexes.join(',');
@@ -156,7 +159,7 @@ function runCatModelAndCustomerChecks(): void {
   avatar.setVisibleToSelf(true);
   avatar.update(0.016);
 
-  const boxMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial());
+  const boxMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), createMaterial('paint', 0xffffff));
   boxMesh.position.set(0, 1.0, 0);
   scene.add(boxMesh);
   boxMesh.updateMatrixWorld(true);
