@@ -5,6 +5,8 @@ import { addOutline } from '../styles/outline.ts';
 import { createGlassMaterial, getToonMaterial, PALETTE } from '../styles/palette.ts';
 import {
   buildCounter,
+  buildCupRack,
+  buildCupSealer,
   buildDoor,
   buildFridge,
   buildMenuBoard,
@@ -16,19 +18,31 @@ import {
   makeBox,
 } from './furniture.ts';
 
+export interface ShopStations {
+  cupRack: THREE.Object3D;
+  teaMachine: THREE.Object3D;
+  fridge: THREE.Object3D;
+  sugar: THREE.Object3D;
+  topping: THREE.Object3D;
+  sealer: THREE.Object3D;
+  counter: THREE.Object3D;
+  trashCan: THREE.Object3D;
+}
+
 export interface ShopWorld {
   root: THREE.Group;
   colliders: AabbBox[];
   interactables: Interactable[];
+  stations: ShopStations;
 }
 
-// Dựng toàn bộ không gian quán trà sữa 10x8m cùng collider và danh sách vật tương tác
+// Dựng toàn bộ không gian quán trà sữa 10x8m cùng collider, trạm pha chế và đồ trang trí
 export function createShopWorld(onNotify: (msg: string) => void): ShopWorld {
   const root = new THREE.Group();
   const colliders: AabbBox[] = [];
   const interactables: Interactable[] = [];
 
-  const registerInteractable = (target: THREE.Object3D, label: string, testMessage: string) => {
+  const registerDecor = (target: THREE.Object3D, label: string, testMessage: string) => {
     interactables.push({
       target,
       label,
@@ -45,7 +59,7 @@ export function createShopWorld(onNotify: (msg: string) => void): ShopWorld {
   floor.receiveShadow = true;
   root.add(floor);
 
-  const areaMat = makeBox(5.2, 0.01, 3.0, PALETTE.floorAccent, -1.5, 0.005, -2.4, 0);
+  const areaMat = makeBox(5.2, 0.01, 3.0, PALETTE.floorAccent, -1.8, 0.005, -2.4, 0);
   areaMat.castShadow = false;
   root.add(areaMat);
 
@@ -56,7 +70,7 @@ export function createShopWorld(onNotify: (msg: string) => void): ShopWorld {
 
   const lampGeo = new THREE.SphereGeometry(0.16, 16, 12);
   for (const [lx, lz] of [
-    [-1.5, -1.5],
+    [-1.8, -1.5],
     [2.8, -0.5],
     [2.8, 2.0],
   ]) {
@@ -67,12 +81,10 @@ export function createShopWorld(onNotify: (msg: string) => void): ShopWorld {
     root.add(globe);
   }
 
-  // 4 bức tường bao quanh 10x8m (tường trước chừa đúng ô cửa 1.44m và 2 cửa sổ)
+  // 4 bức tường bao quanh 10x8m (tường trước chừa ô cửa 1.44m và 2 cửa sổ)
   root.add(makeBox(10.4, 3.4, 0.2, PALETTE.creamWall, 0, 1.7, -4.1, 0.014));
   root.add(makeBox(0.2, 3.4, 8.0, PALETTE.creamWall, -5.1, 1.7, 0, 0.014));
   root.add(makeBox(0.2, 3.4, 8.0, PALETTE.creamWall, 5.1, 1.7, 0, 0.014));
-
-  // Tường trước (z = +4.1): hai bên tường + phần trên cửa + cửa sổ kính
   root.add(makeBox(4.48, 3.4, 0.2, PALETTE.creamWall, -2.96, 1.7, 4.1, 0.014));
   root.add(makeBox(4.48, 3.4, 0.2, PALETTE.creamWall, 2.96, 1.7, 4.1, 0.014));
   root.add(makeBox(1.44, 1.02, 0.2, PALETTE.creamWall, 0, 2.89, 4.1, 0.014));
@@ -96,54 +108,57 @@ export function createShopWorld(onNotify: (msg: string) => void): ShopWorld {
   const door = buildDoor();
   door.position.set(0, 0, 4.1);
   root.add(door);
-  registerInteractable(door, 'Kiểm tra cửa quán', 'Test: Cửa quán đang mở đón khách!');
+  registerDecor(door, 'Kiểm tra cửa quán', 'Cửa quán đang mở đón khách!');
 
-  // Quầy pha chế
+  // Quầy pha chế (dài 4m từ x=-3.85..+0.25 để chừa lối đi >= 1.15m ở hai đầu vào khu sau quầy)
   const counter = buildCounter();
-  counter.position.set(-1.5, 0, -1.5);
+  counter.position.set(-1.8, 0, -1.5);
   root.add(counter);
-  colliders.push({ minX: -3.85, maxX: 0.85, minZ: -1.94, maxZ: -1.06 });
-  registerInteractable(counter, 'Kiểm tra quầy pha chế', 'Test: Quầy pha chế sạch sẽ, sẵn sàng!');
+  colliders.push({ minX: -3.87, maxX: 0.27, minZ: -1.95, maxZ: -1.05 });
 
-  // Máy pha trà đặt trên quầy
+  // Kệ ly, máy pha trà và máy ép ly đặt dọc mặt quầy (tầm với ~1.1m từ sau quầy)
+  const cupRack = buildCupRack();
+  cupRack.position.set(-3.25, 1.02, -1.5);
+  root.add(cupRack);
+
   const teaMachine = buildTeaMachine();
-  teaMachine.position.set(-2.4, 1.02, -1.5);
+  teaMachine.position.set(-2.3, 1.02, -1.5);
   root.add(teaMachine);
-  registerInteractable(teaMachine, 'Pha trà sữa', 'Test: Máy pha trà đang khởi động!');
 
-  // Kệ nguyên liệu
+  const sealer = buildCupSealer();
+  sealer.position.set(-1.3, 1.02, -1.5);
+  root.add(sealer);
+
+  // Kệ nguyên liệu (tách khu đường và khu topping)
   const shelf = buildShelf();
-  shelf.position.set(-2.1, 0, -3.68);
-  root.add(shelf);
-  colliders.push({ minX: -3.12, maxX: -1.08, minZ: -3.94, maxZ: -3.42 });
-  registerInteractable(shelf, 'Xem kệ nguyên liệu', 'Test: Kệ nguyên liệu đầy đủ trân châu & siro!');
+  shelf.root.position.set(-2.05, 0, -3.68);
+  root.add(shelf.root);
+  colliders.push({ minX: -3.08, maxX: -1.02, minZ: -3.94, maxZ: -3.42 });
 
   // Bảng menu treo tường
   const menuBoard = buildMenuBoard();
   menuBoard.position.set(0.35, 1.95, -3.96);
   root.add(menuBoard);
-  registerInteractable(menuBoard, 'Xem bảng menu', 'Test: Trà sữa trân châu, Matcha kem cheese, Trà đào dâu!');
+  registerDecor(menuBoard, 'Xem bảng menu', 'Trà sữa 30k · Trà đào 35k · Matcha 40k (+5k topping)');
 
-  // Tủ lạnh
+  // Tủ lạnh / thùng đá
   const fridge = buildFridge();
   fridge.position.set(-4.38, 0, -3.45);
   root.add(fridge);
   colliders.push({ minX: -4.88, maxX: -3.88, minZ: -3.86, maxZ: -3.04 });
-  registerInteractable(fridge, 'Mở tủ lạnh', 'Test: Tủ lạnh đang giữ sữa tươi ở 4°C!');
 
-  // Thùng rác
+  // Thùng rác đặt sát đầu phải quầy, chừa lối đi > 1.3m tới bàn 1
   const trashCan = buildTrashCan();
-  trashCan.position.set(1.25, 0, -1.5);
+  trashCan.position.set(0.62, 0, -1.5);
   root.add(trashCan);
-  colliders.push({ minX: 1.02, maxX: 1.48, minZ: -1.73, maxZ: -1.27 });
-  registerInteractable(trashCan, 'Đổ thùng rác', 'Test: Đã kiểm tra thùng rác!');
+  colliders.push({ minX: 0.39, maxX: 0.85, minZ: -1.73, maxZ: -1.27 });
 
   // Chổi lau nhà
   const mopSet = buildMopSet();
   mopSet.position.set(4.35, 0, -3.35);
   root.add(mopSet);
   colliders.push({ minX: 4.05, maxX: 4.65, minZ: -3.65, maxZ: -3.05 });
-  registerInteractable(mopSet, 'Cầm chổi lau nhà', 'Test: Đã cầm chổi lau nhà (độ sạch 100%)!');
+  registerDecor(mopSet, 'Kiểm tra chổi lau nhà', 'Dụng cụ vệ sinh sẵn sàng (dùng ở giai đoạn sau)!');
 
   // 4 bộ bàn ghế khách
   const tableCoords: Array<[number, number]> = [
@@ -157,12 +172,22 @@ export function createShopWorld(onNotify: (msg: string) => void): ShopWorld {
     tableSet.position.set(tx, 0, tz);
     root.add(tableSet);
     colliders.push({ minX: tx - 0.94, maxX: tx + 0.94, minZ: tz - 0.42, maxZ: tz + 0.42 });
-    registerInteractable(
-      tableSet,
-      `Lau dọn bàn ${idx + 1}`,
-      `Test: Bàn số ${idx + 1} sạch bóng!`,
-    );
+    registerDecor(tableSet, `Kiểm tra bàn ${idx + 1}`, `Bàn số ${idx + 1} sạch sẽ!`);
   });
 
-  return { root, colliders, interactables };
+  return {
+    root,
+    colliders,
+    interactables,
+    stations: {
+      cupRack,
+      teaMachine,
+      fridge,
+      sugar: shelf.sugarZone,
+      topping: shelf.toppingZone,
+      sealer,
+      counter,
+      trashCan,
+    },
+  };
 }

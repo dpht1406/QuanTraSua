@@ -25,7 +25,7 @@ export function createHud(
     <div class="crosshair hidden" data-el="crosshair"></div>
     <div class="interact-prompt hidden" data-el="prompt"></div>
     <div class="toast hidden" data-el="toast"></div>
-    <div class="hud-controls">WASD: Đi · Shift: Chạy nhẹ · Chuột: Nhìn · E: Tương tác · Esc: Tạm dừng</div>
+    <div class="hud-controls">WASD: Đi · Shift: Chạy nhẹ · Chuột: Nhìn · E: Tương tác · 1/2/3: Chọn mức · Esc: Tạm dừng</div>
   `;
   root.appendChild(layer);
 

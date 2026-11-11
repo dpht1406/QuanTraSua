@@ -1,4 +1,5 @@
 import { createEventBus } from './eventBus.ts';
+import type { ScoreResult } from './scoring.ts';
 
 export interface GameState {
   money: number;
@@ -11,6 +12,8 @@ export interface GameState {
 export type GameEvents = {
   'state:changed': GameState;
   'toast:show': { message: string };
+  orderServed: { score: ScoreResult; elapsed: number; payout: number };
+  orderFailed: { reason: string };
 };
 
 export const DEFAULT_GAME_STATE: GameState = {

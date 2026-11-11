@@ -108,6 +108,7 @@ canvas {
 .menu-overlay {
   position: fixed;
   inset: 0;
+  z-index: 20;
   background: rgba(255, 245, 233, 0.68);
   backdrop-filter: blur(4px);
   display: flex;

@@ -2,13 +2,14 @@ import * as THREE from 'three';
 
 export interface Interactable {
   target: THREE.Object3D;
-  label: string;
+  label: string | (() => string);
   onInteract: () => void;
 }
 
 export interface InteractionSystem {
   update(): void;
   trigger(): void;
+  getCurrentTarget(): Interactable | null;
   getCurrentLabel(): string | null;
 }
 
@@ -46,7 +47,11 @@ export function createInteractionSystem(
       const next = hits.length > 0 ? (meshToItem.get(hits[0].object) ?? null) : null;
       current = next;
 
-      const nextLabel = next ? next.label : null;
+      const nextLabel = next
+        ? typeof next.label === 'function'
+          ? next.label()
+          : next.label
+        : null;
       if (nextLabel !== lastLabel) {
         lastLabel = nextLabel;
         onTargetChange(nextLabel);
@@ -55,6 +60,10 @@ export function createInteractionSystem(
 
     trigger() {
       current?.onInteract();
+    },
+
+    getCurrentTarget() {
+      return current;
     },
 
     getCurrentLabel() {

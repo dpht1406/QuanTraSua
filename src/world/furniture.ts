@@ -43,20 +43,38 @@ export function makeCylinder(
   return mesh;
 }
 
-// Dựng quầy pha chế kèm máy tính tiền và khay trả đồ
+// Dựng quầy pha chế kèm máy tính tiền và khay giao đồ
 export function buildCounter(): THREE.Group {
   const group = new THREE.Group();
-  group.add(makeBox(4.6, 0.94, 0.78, PALETTE.pinkBlush, 0, 0.47, 0));
-  group.add(makeBox(4.74, 0.08, 0.9, PALETTE.teaBrown, 0, 0.98, 0));
-  group.add(makeBox(4.4, 0.14, 0.06, PALETTE.creamTrim, 0, 0.12, 0.4));
+  group.add(makeBox(4.0, 0.94, 0.78, PALETTE.pinkBlush, 0, 0.47, 0));
+  group.add(makeBox(4.14, 0.08, 0.9, PALETTE.teaBrown, 0, 0.98, 0));
+  group.add(makeBox(3.84, 0.14, 0.06, PALETTE.creamTrim, 0, 0.12, 0.4));
   // Máy POS mini
-  group.add(makeBox(0.32, 0.06, 0.28, PALETTE.steelSoft, 0.9, 1.05, 0));
-  const screen = makeBox(0.3, 0.24, 0.05, PALETTE.teaDark, 0.9, 1.2, -0.05);
+  group.add(makeBox(0.32, 0.06, 0.28, PALETTE.steelSoft, 1.0, 1.05, 0));
+  const screen = makeBox(0.3, 0.24, 0.05, PALETTE.teaDark, 1.0, 1.2, -0.05);
   screen.rotation.x = -0.25;
   group.add(screen);
-  // Khay nhận ly trà sữa
-  group.add(makeBox(0.55, 0.03, 0.38, PALETTE.matchaMint, 1.65, 1.035, 0.05, 0.008));
-  group.add(makeCylinder(0.055, 0.045, 0.15, PALETTE.pinkSoft, 1.65, 1.12, 0.05, 0.008));
+  // Khay giao ly trà sữa cho khách
+  group.add(makeBox(0.62, 0.03, 0.42, PALETTE.matchaMint, 1.55, 1.035, 0.06, 0.008));
+  return group;
+}
+
+// Dựng kệ ly chồng nhiều ly pastel trên quầy
+export function buildCupRack(): THREE.Group {
+  const group = new THREE.Group();
+  group.add(makeBox(0.42, 0.04, 0.32, PALETTE.teaBrown, 0, 0.02, 0, 0.008));
+  group.add(makeCylinder(0.065, 0.05, 0.28, PALETTE.creamWall, -0.1, 0.18, 0, 0.009));
+  group.add(makeCylinder(0.065, 0.05, 0.22, PALETTE.pinkSoft, 0.1, 0.15, 0, 0.009));
+  return group;
+}
+
+// Dựng máy ép nắp ly đặt trên quầy
+export function buildCupSealer(): THREE.Group {
+  const group = new THREE.Group();
+  group.add(makeBox(0.42, 0.06, 0.42, PALETTE.steelSoft, 0, 0.03, 0, 0.009));
+  group.add(makeBox(0.38, 0.46, 0.26, PALETTE.pinkBlush, 0, 0.29, -0.06, 0.01));
+  group.add(makeBox(0.34, 0.1, 0.38, PALETTE.creamTrim, 0, 0.48, 0.02, 0.009));
+  group.add(makeBox(0.04, 0.22, 0.04, PALETTE.teaDark, 0.22, 0.38, 0.05, 0.007));
   return group;
 }
 
@@ -72,27 +90,43 @@ export function buildTeaMachine(): THREE.Group {
   return group;
 }
 
-// Dựng kệ nguyên liệu 3 tầng với các hũ topping và bình siro
-export function buildShelf(): THREE.Group {
-  const group = new THREE.Group();
+// Dựng kệ nguyên liệu 3 tầng tách khu đường (trái) và khu topping (phải)
+export function buildShelf(): {
+  root: THREE.Group;
+  sugarZone: THREE.Group;
+  toppingZone: THREE.Group;
+} {
+  const root = new THREE.Group();
   const postXs = [-0.95, 0.95];
   const postZs = [-0.2, 0.2];
   for (const px of postXs) {
     for (const pz of postZs) {
-      group.add(makeBox(0.07, 1.85, 0.07, PALETTE.teaDark, px, 0.925, pz));
+      root.add(makeBox(0.07, 1.85, 0.07, PALETTE.teaDark, px, 0.925, pz));
     }
   }
-  const levels = [0.28, 0.9, 1.52];
-  for (const ly of levels) {
-    group.add(makeBox(2.0, 0.06, 0.46, PALETTE.teaBrown, 0, ly, 0));
+  for (const ly of [0.28, 0.9, 1.52]) {
+    root.add(makeBox(2.0, 0.06, 0.46, PALETTE.teaBrown, 0, ly, 0));
   }
-  // Hũ trân châu và siro nhiều màu pastel
-  const jarColors = [PALETTE.bobaDark, PALETTE.matchaGreen, PALETTE.pinkBlush, PALETTE.syrupPeach];
-  jarColors.forEach((col, i) => {
-    group.add(makeCylinder(0.08, 0.08, 0.2, col, -0.6 + i * 0.4, 1.65, 0, 0.009));
-    group.add(makeBox(0.16, 0.22, 0.12, col, -0.6 + i * 0.4, 1.04, 0, 0.009));
+
+  // Khu đường bên trái kệ
+  const sugarZone = new THREE.Group();
+  sugarZone.add(makeBox(0.86, 0.04, 0.4, PALETTE.creamTrim, -0.48, 0.95, 0, 0.008));
+  sugarZone.add(makeCylinder(0.11, 0.11, 0.26, PALETTE.creamWall, -0.66, 1.1, 0, 0.009));
+  sugarZone.add(makeCylinder(0.11, 0.11, 0.22, PALETTE.syrupPeach, -0.3, 1.08, 0, 0.009));
+  sugarZone.add(makeBox(0.75, 0.22, 0.28, PALETTE.creamWall, -0.48, 1.66, 0, 0.009));
+  root.add(sugarZone);
+
+  // Khu topping bên phải kệ (trân châu, thạch matcha, thạch đào)
+  const toppingZone = new THREE.Group();
+  toppingZone.add(makeBox(0.86, 0.04, 0.4, PALETTE.pinkSoft, 0.48, 0.95, 0, 0.008));
+  const toppingColors = [PALETTE.bobaDark, PALETTE.matchaGreen, PALETTE.pinkBlush];
+  toppingColors.forEach((col, i) => {
+    toppingZone.add(makeCylinder(0.09, 0.09, 0.22, col, 0.22 + i * 0.26, 1.08, 0, 0.009));
+    toppingZone.add(makeBox(0.18, 0.22, 0.16, col, 0.22 + i * 0.26, 1.66, 0, 0.009));
   });
-  return group;
+  root.add(toppingZone);
+
+  return { root, sugarZone, toppingZone };
 }
 
 // Dựng tủ lạnh cửa kính tông bạc hà
