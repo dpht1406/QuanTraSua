@@ -1,18 +1,24 @@
 import type * as THREE from 'three';
 import type { Interactable } from '../interaction/interactionSystem.ts';
-import { SHIFT_END_HOUR, SHIFT_START_HOUR } from '../state/constants.ts';
+import { MAX_WAGE_DEBT, SHIFT_END_HOUR, SHIFT_START_HOUR } from '../state/constants.ts';
 import { gameStore } from '../state/gameState.ts';
 import {
-  applyWageDeduction,
   buildShiftSummary,
   createEmptyShiftStats,
   formatGameTime,
   realElapsedToGameMinutes,
+  settleWages,
   transitionShift,
   type ShiftSummary,
 } from '../state/shift.ts';
 import type { ShopStations } from '../world/shopWorld.ts';
 import type { OrderManager } from './orderManager.ts';
+
+export interface ShiftManagerHooks {
+  getReputationDelta?: () => number;
+  onDebtExceeded?: (debt: number) => string | undefined;
+  onShiftEnded?: () => void;
+}
 
 export interface ShiftManager {
   interactables: Interactable[];
@@ -34,6 +40,7 @@ export function createShiftManager(
   onOpenStaff: () => void,
   onShowSummary: (summary: ShiftSummary, day: number) => void,
   onClearHeldCup: () => void,
+  hooks: ShiftManagerHooks = {},
 ): ShiftManager {
   let realElapsedSec = 0;
   let currentMinutes = SHIFT_START_HOUR * 60;
@@ -83,11 +90,27 @@ export function createShiftManager(
     const prev = gameStore.getState();
     const nextState = transitionShift(prev.shiftState, 'summary');
     const staffWages = getStaffWages();
-    const nextMoney = applyWageDeduction(prev.money, staffWages);
+    const settlement = settleWages(prev.money, staffWages, prev.wageDebt);
+    const quitStaffName =
+      settlement.debt > MAX_WAGE_DEBT ? hooks.onDebtExceeded?.(settlement.debt) : undefined;
+    const latest = gameStore.getState();
     const statsWithWages = { ...prev.shiftStats, staffWages };
-    const summary = buildShiftSummary(statsWithWages);
+    const summary = buildShiftSummary(statsWithWages, {
+      reputationEnd: latest.reputation,
+      cleanlinessEnd: latest.cleanliness,
+      reputationDelta: hooks.getReputationDelta?.() ?? 0,
+      prevDebtPaid: settlement.prevDebtPaid,
+      wageDebt: settlement.debt,
+      quitStaffName,
+    });
     onClearHeldCup();
-    gameStore.updateState({ shiftState: nextState, money: nextMoney, shiftStats: statsWithWages });
+    hooks.onShiftEnded?.();
+    gameStore.updateState({
+      shiftState: nextState,
+      money: settlement.money,
+      wageDebt: settlement.debt,
+      shiftStats: statsWithWages,
+    });
     gameStore.bus.emit('shiftClosed', { summary });
     onShowSummary(summary, prev.day);
   };

@@ -30,15 +30,16 @@ import {
   scoreDrink,
 } from './scoring.ts';
 import {
-  applyWageDeduction,
   buildShiftSummary,
   formatGameTime,
   getCustomerGapRange,
   isPeakHour,
   realElapsedToGameMinutes,
+  settleWages,
   transitionShift,
 } from './shift.ts';
 import { buildBaristaCup, createStaffStore } from './staff.ts';
+import { runPhase5aSelfCheck } from './selfCheck5a.ts';
 import { resolveAabbMove, type AabbBox } from '../player/collision.ts';
 
 // Tự kiểm tra GameState: giá trị mặc định và cập nhật
@@ -152,8 +153,8 @@ const summary = buildShiftSummary({
 assert.equal(summary.avgStars, 4.4);
 assert.equal(summary.staffWages, 80000);
 assert.equal(summary.profit, 30000);
-assert.equal(applyWageDeduction(50000, 80000), 0);
-assert.equal(applyWageDeduction(200000, 80000), 120000);
+assert.deepEqual(settleWages(50000, 80000), { money: 0, debt: 30000, prevDebtPaid: 0 });
+assert.deepEqual(settleWages(200000, 80000), { money: 120000, debt: 0, prevDebtPaid: 0 });
 
 // Bước 0: kiểm tra chỉ trừ nguyên liệu ở lần chọn đầu tiên trên cùng 1 ly
 const cupInv = createInventoryStore();
@@ -211,6 +212,7 @@ gameBus.on('staffFired', ({ staff }) => staffEvents.push(`-${staff.id}`));
 const staffStore = createStaffStore(gameBus);
 assert.equal(staffStore.hire('na', 'open').ok, false);
 assert.equal(staffStore.hire('na', 'closed').ok, true);
+assert.equal(staffStore.hire('minh', 'closed').ok, false); // tối đa 1 người mỗi vai trò
 assert.equal(staffStore.hire('linh', 'closed').ok, true);
 assert.equal(staffStore.hire('chau', 'closed').ok, false);
 assert.equal(staffStore.getHired().length, 2);
@@ -233,4 +235,5 @@ assert.equal(findMissingCupItem(cleanCup.cup, cupInv.getStock()), null);
 assert.equal(consumeCupIngredients(cleanCup.cup, (it, q) => cupInv.consume(it, q)), true);
 assert.equal(cupInv.getCount('matcha'), INVENTORY_CONFIG.matcha.initial - 1);
 
-console.log('Self-check OK: GameState, EventBus, AABB, Menu, Scoring, Inventory, Shift, Cleanliness, Staff');
+runPhase5aSelfCheck();
+console.log('Self-check OK: GameState, EventBus, AABB, Menu, Scoring, Inventory, Shift, Cleanliness, Staff, Phase 5a');

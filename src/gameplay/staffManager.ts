@@ -49,6 +49,7 @@ export function createStaffManager(
   inventory: ReturnType<typeof createInventoryStore>,
   hasPlayerCup: () => boolean,
   bus: EventBus<GameEvents>,
+  isPaused?: () => boolean,
 ): StaffManager {
   const runtimes = new Map<string, StaffRuntime>();
   let warnedOrder: DrinkOrder | null = null;
@@ -216,6 +217,13 @@ export function createStaffManager(
         for (const rt of runtimes.values()) {
           if (rt.state !== 'idle') resetRuntime(rt);
           rt.actor.moveToward(rt.homeX, rt.homeZ, dt);
+        }
+        return;
+      }
+
+      if (isPaused?.()) {
+        for (const rt of runtimes.values()) {
+          rt.actor.animateWork(false, dt);
         }
         return;
       }

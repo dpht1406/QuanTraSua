@@ -5,6 +5,7 @@ export interface SceneBundle {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
+  setDimmed(dimmed: boolean): void;
   dispose(): void;
 }
 
@@ -58,6 +59,11 @@ export function createSceneSetup(container: HTMLElement): SceneBundle {
     scene,
     camera,
     renderer,
+    setDimmed(dimmed) {
+      ambient.intensity = dimmed ? 0.22 : 0.85;
+      hemi.intensity = dimmed ? 0.16 : 0.65;
+      sun.intensity = dimmed ? 0.18 : 0.95;
+    },
     dispose() {
       window.removeEventListener('resize', onResize);
       renderer.dispose();

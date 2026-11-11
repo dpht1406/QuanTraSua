@@ -13,6 +13,11 @@ import type { ShiftState } from './shift.ts';
 
 export type StaffRole = 'cleaner' | 'barista';
 
+const ROLE_LABELS: Record<StaffRole, string> = {
+  cleaner: 'Dọn dẹp',
+  barista: 'Pha chế',
+};
+
 export interface StaffMember {
   id: string;
   name: string;
@@ -107,6 +112,12 @@ export function createStaffStore(bus?: EventBus<GameEvents>) {
       if (!candidate) {
         return { ok: false, message: 'Không tìm thấy ứng viên!' };
       }
+      if (hired.some((s) => s.role === candidate.role)) {
+        return {
+          ok: false,
+          message: `Đã có 1 nhân viên ${ROLE_LABELS[candidate.role]} rồi (tối đa 1 người/vai trò)!`,
+        };
+      }
       const member = { ...candidate };
       hired = [...hired, member];
       bus?.emit('staffHired', { staff: member });
@@ -124,6 +135,18 @@ export function createStaffStore(bus?: EventBus<GameEvents>) {
       hired = hired.filter((s) => s.id !== id);
       bus?.emit('staffFired', { staff: target });
       return { ok: true, message: `Đã sa thải ${target.name}.`, staff: target };
+    },
+
+    // Nhân viên lương cao nhất tự nghỉ việc khi nợ lương vượt ngưỡng
+    quitHighestPaid(reason: string): StaffMember | null {
+      if (hired.length === 0) return null;
+      let highest = hired[0];
+      for (const s of hired) {
+        if (s.wage > highest.wage) highest = s;
+      }
+      hired = hired.filter((s) => s.id !== highest.id);
+      bus?.emit('staffFired', { staff: highest, reason });
+      return highest;
     },
   };
 }

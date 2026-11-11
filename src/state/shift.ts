@@ -2,6 +2,10 @@ import {
   CUSTOMER_GAP_NORMAL,
   CUSTOMER_GAP_PEAK,
   PEAK_HOURS,
+  REP_GAP_MAX_MULTIPLIER,
+  REP_GAP_MIN_MULTIPLIER,
+  REPUTATION_MAX,
+  REPUTATION_MIN,
   SHIFT_END_HOUR,
   SHIFT_REAL_DURATION_SEC,
   SHIFT_START_HOUR,
@@ -26,6 +30,21 @@ export interface ShiftSummary {
   ingredientCost: number;
   staffWages: number;
   profit: number;
+  shopRating: number;
+  reputationEnd: number;
+  reputationDelta: number;
+  prevDebtPaid: number;
+  wageDebt: number;
+  quitStaffName?: string;
+}
+
+export interface ShiftSummaryExtras {
+  reputationEnd?: number;
+  cleanlinessEnd?: number;
+  reputationDelta?: number;
+  prevDebtPaid?: number;
+  wageDebt?: number;
+  quitStaffName?: string;
 }
 
 const ALLOWED_TRANSITIONS: Record<ShiftState, readonly ShiftState[]> = {
@@ -82,10 +101,34 @@ export function getCustomerGapRange(gameMinutes: number): { minSec: number; maxS
   return isPeakHour(gameMinutes) ? CUSTOMER_GAP_PEAK : CUSTOMER_GAP_NORMAL;
 }
 
-// Tổng hợp số liệu ca thành bảng kết quả doanh thu, chi phí và lợi nhuận
-export function buildShiftSummary(stats: ShiftStats): ShiftSummary {
+// Hệ số khoảng cách khách theo uy tín: uy tín cao -> khách dày hơn (hệ số nhỏ), thấp -> thưa hơn
+export function getCustomerGapMultiplier(reputation: number): number {
+  const rep = Math.max(REPUTATION_MIN, Math.min(REPUTATION_MAX, reputation));
+  const raw =
+    rep >= 50
+      ? 1 - ((rep - 50) / 50) * (1 - REP_GAP_MIN_MULTIPLIER)
+      : 1 + ((50 - rep) / 50) * (REP_GAP_MAX_MULTIPLIER - 1);
+  return Math.max(REP_GAP_MIN_MULTIPLIER, Math.min(REP_GAP_MAX_MULTIPLIER, Number(raw.toFixed(3))));
+}
+
+// Đánh giá cuối ca 1..5 sao dựa trên uy tín cuối ca và độ sạch
+export function calcShopRating(reputation: number, cleanliness: number): number {
+  const rep = Math.max(0, Math.min(100, reputation));
+  const clean = Math.max(0, Math.min(100, cleanliness));
+  const score = rep * 0.6 + clean * 0.4;
+  if (score >= 85) return 5;
+  if (score >= 70) return 4;
+  if (score >= 50) return 3;
+  if (score >= 30) return 2;
+  return 1;
+}
+
+// Tổng hợp số liệu ca thành bảng kết quả doanh thu, chi phí, lợi nhuận và uy tín/nợ
+export function buildShiftSummary(stats: ShiftStats, extras: ShiftSummaryExtras = {}): ShiftSummary {
   const avgStars =
     stats.servedCount > 0 ? Number((stats.totalStars / stats.servedCount).toFixed(1)) : 0;
+  const reputationEnd = extras.reputationEnd ?? 50;
+  const cleanlinessEnd = extras.cleanlinessEnd ?? 100;
   return {
     revenue: stats.revenue,
     servedCount: stats.servedCount,
@@ -94,11 +137,31 @@ export function buildShiftSummary(stats: ShiftStats): ShiftSummary {
     ingredientCost: stats.ingredientCost,
     staffWages: stats.staffWages,
     profit: stats.revenue - stats.ingredientCost - stats.staffWages,
+    shopRating: calcShopRating(reputationEnd, cleanlinessEnd),
+    reputationEnd,
+    reputationDelta: extras.reputationDelta ?? 0,
+    prevDebtPaid: extras.prevDebtPaid ?? 0,
+    wageDebt: extras.wageDebt ?? 0,
+    quitStaffName: extras.quitStaffName,
   };
 }
 
-// Trừ tiền lương nhân viên khi kết ca, giữ tiền không xuống dưới 0
-export function applyWageDeduction(money: number, staffWages: number): number {
-  // shortcut: tiền không xuống dưới 0 khi không đủ trả lương nhân viên, chưa có cơ chế nợ ở GĐ4
-  return Math.max(0, money - Math.max(0, staffWages));
+// Trừ nợ cũ trước rồi trừ lương ca hiện tại; phần thiếu ghi thành nợ lương
+export function settleWages(
+  money: number,
+  staffWages: number,
+  prevDebt = 0,
+): { money: number; debt: number; prevDebtPaid: number } {
+  const safeMoney = Math.max(0, money);
+  const safePrevDebt = Math.max(0, prevDebt);
+  const safeWages = Math.max(0, staffWages);
+  const prevDebtPaid = Math.min(safeMoney, safePrevDebt);
+  const afterDebtMoney = safeMoney - prevDebtPaid;
+  const wagesPaid = Math.min(afterDebtMoney, safeWages);
+  const debt = safePrevDebt - prevDebtPaid + (safeWages - wagesPaid);
+  return {
+    money: afterDebtMoney - wagesPaid,
+    debt,
+    prevDebtPaid,
+  };
 }

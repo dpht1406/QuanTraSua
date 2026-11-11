@@ -46,15 +46,16 @@ export function createStaffPanel(
   const wageEl = overlay.querySelector<HTMLElement>('[data-el="wage"]')!;
   const closeBtn = overlay.querySelector<HTMLButtonElement>('[data-el="close"]')!;
 
-  const renderCard = (member: StaffMember, hired: boolean, full: boolean) => {
+  const renderCard = (member: StaffMember, hired: boolean, disabled: boolean, roleTaken: boolean) => {
     const errText =
       member.role === 'barista' ? ` · Tỉ lệ lỗi: ${Math.round(member.errorRate * 100)}%` : '';
     const roleCls = member.role === 'cleaner' ? 'role-cleaner' : 'role-barista';
+    const hireLabel = roleTaken ? 'Đủ vai trò' : 'Thuê';
     const btn = hired
       ? `<button type="button" class="staff-btn fire" data-act="fire" data-id="${member.id}">Sa thải</button>`
       : `<button type="button" class="staff-btn hire" data-act="hire" data-id="${member.id}" ${
-          full ? 'disabled' : ''
-        }>Thuê</button>`;
+          disabled ? 'disabled' : ''
+        }>${hireLabel}</button>`;
 
     return `
       <div class="staff-row">
@@ -77,7 +78,11 @@ export function createStaffPanel(
     wageEl.textContent = `${fmt.format(staffStore.getTotalWage())}đ`;
     listEl.innerHTML = staffStore
       .getCandidates()
-      .map((c) => renderCard(c, staffStore.isHired(c.id), full))
+      .map((c) => {
+        const isHired = staffStore.isHired(c.id);
+        const roleTaken = !isHired && hired.some((h) => h.role === c.role);
+        return renderCard(c, isHired, full || roleTaken, roleTaken);
+      })
       .join('');
   };
 

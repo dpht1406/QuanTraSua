@@ -9,6 +9,8 @@ export interface HudController {
   setHoldProgress(progress: number | null): void;
   setStock(stock: InventoryStock): void;
   setConfirmClose(active: boolean): void;
+  setGreetHint(remainingSec: number | null): void;
+  setEventBanner(text: string | null): void;
   setRelockVisible(visible: boolean): void;
   dispose(): void;
 }
@@ -38,15 +40,18 @@ export function createHud(
         <div class="hud-pill hud-shift" data-field="shift"></div>
         <div class="hud-pill hud-money">Tiền: <span data-field="money"></span></div>
         <div class="hud-pill hud-clean" data-field="cleanWrap">Sạch: <span data-field="clean"></span></div>
+        <div class="hud-pill hud-rep" data-field="repWrap">Uy tín: <span data-field="rep"></span></div>
       </div>
       <div class="hud-stock hidden" data-el="stock"></div>
+      <div class="event-banner hidden" data-el="eventBanner"></div>
     </div>
     <div class="confirm-banner hidden" data-el="confirm">Kết ca sớm? [Y] Đồng ý · [N] Hủy</div>
+    <div class="greet-hint hidden" data-el="greetHint"></div>
     <div class="crosshair hidden" data-el="crosshair"></div>
     <div class="interact-prompt hidden" data-el="prompt"></div>
     <div class="hold-progress hidden" data-el="hold"><div class="hold-fill" data-el="holdFill"></div></div>
     <div class="toast hidden" data-el="toast"></div>
-    <div class="hud-controls">WASD: Đi · Shift: Chạy nhẹ · Chuột: Nhìn · E / Giữ E: Tương tác & Lau dọn · 1/2/3: Chọn mức · Esc: Tạm dừng</div>
+    <div class="hud-controls">WASD: Đi · Shift: Chạy nhẹ · Chuột: Nhìn · E / Giữ E: Tương tác & Lau · G: Chào · 1/2/3: Chọn · Esc: Tạm dừng</div>
   `;
   root.appendChild(layer);
 
@@ -62,8 +67,12 @@ export function createHud(
   const moneyEl = layer.querySelector<HTMLElement>('[data-field="money"]')!;
   const cleanWrapEl = layer.querySelector<HTMLElement>('[data-field="cleanWrap"]')!;
   const cleanEl = layer.querySelector<HTMLElement>('[data-field="clean"]')!;
+  const repWrapEl = layer.querySelector<HTMLElement>('[data-field="repWrap"]')!;
+  const repEl = layer.querySelector<HTMLElement>('[data-field="rep"]')!;
   const stockEl = layer.querySelector<HTMLElement>('[data-el="stock"]')!;
+  const eventBannerEl = layer.querySelector<HTMLElement>('[data-el="eventBanner"]')!;
   const confirmEl = layer.querySelector<HTMLElement>('[data-el="confirm"]')!;
+  const greetHintEl = layer.querySelector<HTMLElement>('[data-el="greetHint"]')!;
   const crosshairEl = layer.querySelector<HTMLElement>('[data-el="crosshair"]')!;
   const promptEl = layer.querySelector<HTMLElement>('[data-el="prompt"]')!;
   const holdEl = layer.querySelector<HTMLElement>('[data-el="hold"]')!;
@@ -90,6 +99,12 @@ export function createHud(
     cleanWrapEl.className = `hud-pill hud-clean ${tier}`;
   };
 
+  const renderRep = (value: number) => {
+    repEl.textContent = `${value}`;
+    const tier = value >= 70 ? 'good' : value >= 40 ? 'mid' : 'low';
+    repWrapEl.className = `hud-pill hud-rep ${tier}`;
+  };
+
   const renderState = (state: GameState) => {
     latestShift = state.shiftState;
     dayEl.textContent = `Ngày ${state.day}`;
@@ -98,6 +113,7 @@ export function createHud(
     shiftEl.textContent = SHIFT_LABELS[state.shiftState];
     shiftEl.className = `hud-pill hud-shift ${state.shiftState}`;
     renderClean(state.cleanliness);
+    renderRep(state.reputation);
     renderStock();
   };
 
@@ -113,6 +129,7 @@ export function createHud(
 
   const unsubState = bus.on('state:changed', renderState);
   const unsubClean = bus.on('cleanlinessChanged', ({ value }) => renderClean(value));
+  const unsubRep = bus.on('reputationChanged', ({ value }) => renderRep(value));
   const unsubStock = bus.on('stockChanged', ({ stock }) => {
     latestStock = stock;
     renderStock();
@@ -159,6 +176,24 @@ export function createHud(
       confirmEl.classList.toggle('hidden', !active);
     },
 
+    setGreetHint(remainingSec) {
+      if (remainingSec === null || remainingSec <= 0) {
+        greetHintEl.classList.add('hidden');
+        return;
+      }
+      greetHintEl.textContent = `[G] Chào khách (${Math.ceil(remainingSec)}s)`;
+      greetHintEl.classList.remove('hidden');
+    },
+
+    setEventBanner(text) {
+      if (!text) {
+        eventBannerEl.classList.add('hidden');
+        return;
+      }
+      eventBannerEl.textContent = text;
+      eventBannerEl.classList.remove('hidden');
+    },
+
     setRelockVisible(visible) {
       relockEl.classList.toggle('hidden', !visible);
     },
@@ -166,6 +201,7 @@ export function createHud(
     dispose() {
       unsubState();
       unsubClean();
+      unsubRep();
       unsubStock();
       unsubToast();
       relockEl.removeEventListener('click', onRelockClick);

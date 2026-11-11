@@ -50,12 +50,14 @@ export function createDrinkStations(
   bus: EventBus<GameEvents>,
   heldCupUi: HeldCupView,
   levelPickerUi: LevelPickerView,
+  getBlockReason?: (isMakingStation: boolean) => string | null,
 ): DrinkStationController {
   let heldCup: Cup | null = null;
   let activePicker: PickerSession | null = null;
 
   const toast = (message: string) => bus.emit('toast:show', { message });
   const syncCupUi = () => heldCupUi.render(heldCup);
+  const makingLabel = (label: string) => getBlockReason?.(true) ?? label;
 
   const closePicker = () => {
     if (!activePicker) return;
@@ -73,7 +75,12 @@ export function createDrinkStations(
     levelPickerUi.show(title, options);
   };
 
-  const requireActiveShift = (): boolean => {
+  const requireActiveShift = (isMakingStation = true): boolean => {
+    const blocked = getBlockReason?.(isMakingStation);
+    if (blocked) {
+      toast(blocked);
+      return false;
+    }
     const s = getShiftState();
     if (s === 'open' || s === 'closing') return true;
     toast('Quán đang đóng cửa! Ra cửa bấm E để mở ca.');
@@ -87,7 +94,7 @@ export function createDrinkStations(
   };
 
   const requireUnsealedCup = (): Cup | null => {
-    if (!requireActiveShift()) return null;
+    if (!requireActiveShift(true)) return null;
     if (!heldCup) {
       toast('Hãy lấy ly ở kệ ly trước!');
       return null;
@@ -113,11 +120,13 @@ export function createDrinkStations(
     {
       target: stations.cupRack,
       label: () => {
+        const blocked = getBlockReason?.(true);
+        if (blocked) return blocked;
         if (orderManager.isOrderLocked()) return 'Kệ ly (nhân viên đang pha đơn)';
         return heldCup ? 'Kệ ly (đang cầm ly)' : `Lấy ly (còn ${inventory.getCount('cup')})`;
       },
       onInteract() {
-        if (!requireActiveShift()) return;
+        if (!requireActiveShift(true)) return;
         if (orderManager.isOrderLocked()) {
           toast('Nhân viên đang pha đơn hiện tại rồi!');
           return;
@@ -134,7 +143,7 @@ export function createDrinkStations(
     },
     {
       target: stations.teaMachine,
-      label: 'Chọn trà nền (1/2/3)',
+      label: () => makingLabel('Chọn trà nền (1/2/3)'),
       onInteract() {
         const cup = requireUnsealedCup();
         if (!cup) return;
@@ -155,7 +164,7 @@ export function createDrinkStations(
     },
     {
       target: stations.fridge,
-      label: () => `Cho đá (còn ${inventory.getCount('ice')})`,
+      label: () => makingLabel(`Cho đá (còn ${inventory.getCount('ice')})`),
       onInteract() {
         const cup = requireUnsealedCup();
         if (!cup) return;
@@ -167,7 +176,7 @@ export function createDrinkStations(
     },
     {
       target: stations.sugar,
-      label: () => `Cho đường (còn ${inventory.getCount('sugar')})`,
+      label: () => makingLabel(`Cho đường (còn ${inventory.getCount('sugar')})`),
       onInteract() {
         const cup = requireUnsealedCup();
         if (!cup) return;
@@ -179,7 +188,7 @@ export function createDrinkStations(
     },
     {
       target: stations.topping,
-      label: 'Cho topping (1/2/3)',
+      label: () => makingLabel('Cho topping (1/2/3)'),
       onInteract() {
         const cup = requireUnsealedCup();
         if (!cup) return;
@@ -201,11 +210,13 @@ export function createDrinkStations(
     {
       target: stations.sealer,
       label: () => {
+        const blocked = getBlockReason?.(true);
+        if (blocked) return blocked;
         if (!heldCup || !heldCup.base) return 'Máy ép ly (cần trà nền)';
         return heldCup.sealed ? 'Máy ép ly (đã đậy nắp)' : `Đậy nắp ly (còn ${inventory.getCount('lid')})`;
       },
       onInteract() {
-        if (!requireActiveShift()) return;
+        if (!requireActiveShift(true)) return;
         if (!heldCup) return toast('Hãy lấy ly trước!');
         if (!heldCup.base) return toast('Cần chọn trà nền trước khi đậy nắp!');
         if (heldCup.sealed) return toast('Ly này đã được đậy nắp rồi!');
@@ -223,7 +234,7 @@ export function createDrinkStations(
         return heldCup.sealed ? 'Giao ly cho khách' : 'Quầy giao đồ (cần đậy nắp)';
       },
       onInteract() {
-        if (!requireActiveShift()) return;
+        if (!requireActiveShift(false)) return;
         if (!heldCup) return toast('Bạn chưa cầm ly nào!');
         if (!heldCup.sealed) return toast('Ly chưa đậy nắp! Hãy qua máy ép ly trước.');
         if (orderManager.deliverCup(heldCup)) {
@@ -240,6 +251,8 @@ export function createDrinkStations(
         return heldCup ? 'Bỏ ly đang cầm' : `Thùng rác (${cleanliness.getTrashCups()}/${TRASH_FULL_CUPS})`;
       },
       onInteract() {
+        const blocked = getBlockReason?.(false);
+        if (blocked) return toast(blocked);
         if (cleanliness.isTrashFull()) {
           cleanliness.emptyTrash();
           onTrashChanged();

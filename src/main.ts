@@ -8,6 +8,7 @@ import { createSceneSetup } from './core/sceneSetup.ts';
 import { createDrinkStations } from './gameplay/drinkStations.ts';
 import { createOrderManager } from './gameplay/orderManager.ts';
 import { createShiftManager } from './gameplay/shiftManager.ts';
+import { createShopEventsBridge } from './gameplay/shopEvents.ts';
 import { createStaffManager } from './gameplay/staffManager.ts';
 import { createInteractionSystem } from './interaction/interactionSystem.ts';
 import { createFirstPersonController } from './player/firstPersonController.ts';
@@ -32,12 +33,12 @@ import { createCleanlinessView } from './world/cleanlinessView.ts';
 import { createCustomerActor } from './world/customer.ts';
 import { createShopWorld } from './world/shopWorld.ts';
 
-// Khởi tạo toàn bộ game Giai đoạn 4 và kết nối vệ sinh, nhân viên, ca làm việc, kho, pha chế
+// Khởi tạo toàn bộ game và kết nối uy tín, sự kiện ngẫu nhiên, nợ lương cùng pha chế
 function bootstrap() {
   const app = document.getElementById('app');
   if (!app) throw new Error('Không tìm thấy phần tử #app');
 
-  const { scene, camera, renderer } = createSceneSetup(app);
+  const { scene, camera, renderer, setDimmed } = createSceneSetup(app);
   const input = createInput();
 
   const inventory = createInventoryStore(undefined, (stock, spentCost) => {
@@ -73,6 +74,15 @@ function bootstrap() {
   const levelPicker = createLevelPicker(app);
   const heldCupUi = createHeldCupView(app);
 
+  let drinkStations: ReturnType<typeof createDrinkStations>;
+  const shopEvents = createShopEventsBridge(
+    app,
+    hud,
+    staffStore,
+    setDimmed,
+    () => drinkStations?.closePicker(),
+  );
+
   let shiftManager: ReturnType<typeof createShiftManager>;
   const orderManager = createOrderManager(
     customer,
@@ -80,13 +90,12 @@ function bootstrap() {
     () => shiftManager.getGameMinutes(),
     (view) => orderTicket.setOrder(view, gameStore.getState().shiftState),
     (text, positive) => orderTicket.showResult(text, positive),
+    shopEvents.getOrderHooks(),
   );
 
-  gameStore.bus.on('orderServed', ({ score }) => {
-    cleanliness.recordCustomerServed(score.total);
-  });
+  gameStore.bus.on('orderServed', ({ score }) => cleanliness.recordCustomerServed(score.total));
 
-  const drinkStations = createDrinkStations(
+  drinkStations = createDrinkStations(
     world.stations,
     orderManager,
     inventory,
@@ -96,6 +105,7 @@ function bootstrap() {
     gameStore.bus,
     heldCupUi,
     levelPicker,
+    (isMaking) => shopEvents.getDrinkBlockReason(isMaking),
   );
 
   const restockPanel = createRestockPanel(
@@ -122,18 +132,14 @@ function bootstrap() {
         money: updated.money,
       };
     },
-    () => {
-      hud.setRelockVisible(true);
-    },
+    () => hud.setRelockVisible(true),
   );
 
   const staffPanel = createStaffPanel(
     app,
     staffStore,
     () => gameStore.getState().shiftState,
-    () => {
-      hud.setRelockVisible(true);
-    },
+    () => hud.setRelockVisible(true),
   );
 
   const shiftSummary = createShiftSummaryView(app, () => {
@@ -164,6 +170,7 @@ function bootstrap() {
       shiftSummary.show(summary, day);
     },
     () => drinkStations.clearHeldCup(),
+    shopEvents.getShiftHooks(),
   );
 
   const interaction = createInteractionSystem(
@@ -186,6 +193,7 @@ function bootstrap() {
     inventory,
     () => drinkStations.hasHeldCup(),
     gameStore.bus,
+    () => shopEvents.isPowerOutage(),
   );
 
   const menu = createMenuOverlay(app, () => {
@@ -215,7 +223,11 @@ function bootstrap() {
     if (player.isLocked()) interaction.trigger();
   });
   input.onDigit((digit) => {
-    if (player.isLocked()) drinkStations.pickDigit(digit);
+    if (!player.isLocked()) return;
+    if (!shopEvents.handleDigit(digit)) drinkStations.pickDigit(digit);
+  });
+  input.onKey('KeyG', () => {
+    if (player.isLocked()) orderManager.tryGreet();
   });
   input.onKey('KeyY', () => {
     if (player.isLocked()) shiftManager.confirmEarlyClose(true);
@@ -239,6 +251,7 @@ function bootstrap() {
       orderManager.update(dt);
       const shiftState = gameStore.getState().shiftState;
       cleanliness.update(dt, shiftState);
+      shopEvents.update(dt, shiftState, orderManager.getActiveOrder());
       staffManager.update(dt, shiftState);
     }
   });

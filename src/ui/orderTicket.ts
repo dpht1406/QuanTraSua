@@ -48,7 +48,7 @@ export function createOrderTicket(root: HTMLElement): OrderTicketView {
         return;
       }
 
-      const { order, remainingSec, ratio, lockedByStaff } = view;
+      const { order, remainingSec, ratio, lockedByStaff, isPicky } = view;
       timerEl.textContent = `${Math.ceil(remainingSec)}s`;
       bodyEl.innerHTML = `
         <div class="order-drink">${DRINK_LABELS[order.base]}</div>
@@ -57,6 +57,7 @@ export function createOrderTicket(root: HTMLElement): OrderTicketView {
           <span>Đá ${order.ice}%</span>
           <span>${TOPPING_LABELS[order.topping]}</span>
         </div>
+        ${isPicky ? '<div class="order-picky">Khách khó tính · Uy tín x2</div>' : ''}
         ${lockedByStaff ? `<div class="order-staff-lock">${lockedByStaff} đang pha...</div>` : ''}
       `;
       fillEl.style.width = `${Math.max(0, Math.min(100, ratio * 100))}%`;

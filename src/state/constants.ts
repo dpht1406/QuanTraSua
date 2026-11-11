@@ -81,3 +81,41 @@ export const STAFF_CANDIDATES = [
   { id: 'linh', name: 'Chị Linh', role: 'barista', wage: 80000, speed: 1.4, errorRate: 0.25 },
   { id: 'chau', name: 'Bảo Châu', role: 'barista', wage: 120000, speed: 2.1, errorRate: 0.08 },
 ] as const;
+
+// Cấu hình uy tín (0..100), thái độ, sự kiện ngẫu nhiên và nợ lương (GĐ5a)
+export const REPUTATION_MIN = 0;
+export const REPUTATION_MAX = 100;
+export const REP_HIGH_SCORE_MIN = 80;
+export const REP_SERVE_GOOD = 2;
+export const REP_SERVE_LOW_SCORE = 3;
+export const REP_SERVE_LATE = 2;
+export const REP_ORDER_FAILED = 4;
+export const REP_DIRTY_THRESHOLD = 60;
+export const REP_DIRTY_CHECK_SEC = 20;
+export const REP_DIRTY_PENALTY = 2;
+
+export const GREET_WINDOW_SEC = 5;
+export const REP_GREET_BONUS = 1;
+
+export const COMPLAINT_SCORE_THRESHOLD = LOW_SCORE_THRESHOLD;
+export const COMPLAINT_CHANCE = 0.6;
+export const COMPLAINT_TIMEOUT_SEC = 10;
+export const COMPLAINT_REP_DELTA = {
+  apologize: 0,
+  refund: 3,
+  ignore: -4,
+} as const;
+
+export const REP_GAP_MIN_MULTIPLIER = 0.7;
+export const REP_GAP_MAX_MULTIPLIER = 1.6;
+
+export const MAX_EVENTS_PER_SHIFT = 2;
+export const EVENT_FIRST_DELAY_RANGE = { minSec: 45, maxSec: 95 } as const;
+export const EVENT_NEXT_DELAY_RANGE = { minSec: 55, maxSec: 110 } as const;
+export const PICKY_PATIENCE_MULTIPLIER = 0.65;
+export const PICKY_REP_MULTIPLIER = 2;
+export const POWER_OUTAGE_DURATION_RANGE = { minSec: 20, maxSec: 30 } as const;
+export const RUSH_HOUR_DURATION_SEC = 60;
+
+export const MAX_WAGE_DEBT = 100000;
+export const REP_DEBT_QUIT_PENALTY = 8;

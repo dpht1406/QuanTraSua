@@ -228,7 +228,8 @@
   background: #cbe5ce;
 }
 
-.sum-profit.profit-neg {
+.sum-profit.profit-neg,
+.sum-debt {
   background: #fbd7de;
 }
 

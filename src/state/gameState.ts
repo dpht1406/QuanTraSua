@@ -9,8 +9,12 @@ import {
 } from './shift.ts';
 import type { StaffMember } from './staff.ts';
 
+export type ComplaintChoice = 'apologize' | 'refund' | 'ignore';
+export type RandomEventType = 'picky_customer' | 'power_outage' | 'rush_hour';
+
 export interface GameState {
   money: number;
+  wageDebt: number;
   day: number;
   time: string;
   reputation: number;
@@ -28,12 +32,17 @@ export type GameEvents = {
   shiftClosed: { summary: ShiftSummary };
   stockChanged: { stock: InventoryStock; spentCost: number };
   cleanlinessChanged: { value: number; delta: number };
+  reputationChanged: { value: number; delta: number; reason: string };
+  customerComplained: { choice: ComplaintChoice };
+  randomEventStarted: { type: RandomEventType };
+  randomEventEnded: { type: RandomEventType };
   staffHired: { staff: StaffMember };
-  staffFired: { staff: StaffMember };
+  staffFired: { staff: StaffMember; reason?: string };
 };
 
 export const DEFAULT_GAME_STATE: GameState = {
   money: 500000,
+  wageDebt: 0,
   day: 1,
   time: '08:00',
   reputation: 50,
