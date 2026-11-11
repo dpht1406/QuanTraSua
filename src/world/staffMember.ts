@@ -1,9 +1,13 @@
 import * as THREE from 'three';
 import { resolveAabbMove, type AabbBox } from '../player/collision.ts';
+import { STAFF_CANDIDATES } from '../state/constants.ts';
+import { pickVariant, type CatVariant } from '../state/catVariants.ts';
+import { CAT_BASE_HEIGHT, CAT_HEAD_RADIUS, CAT_HEAD_SCALE } from '../state/constantsCat.ts';
 import type { StaffMember } from '../state/staff.ts';
 import { PALETTE } from '../styles/palette.ts';
+import { animateCat, createCat, type CatRig } from './catModel.ts';
 import { createFallAnimation, type FallDir } from './fallAnimation.ts';
-import { makeBox } from './furniture.ts';
+import { makeBox, makeCylinder } from './furniture.ts';
 import type { Aabb3D } from './shopWorld.ts';
 
 export interface StaffActor {
@@ -23,8 +27,50 @@ const STAFF_RADIUS = 0.25;
 const ARRIVE_DIST = 0.34;
 const HITBOX_HALF_W = 0.28;
 const HITBOX_HEIGHT = 1.32;
+const STAFF_HEAD_STAR_Y = 1.08;
 
-// Tạo nhân vật nhân viên khối đơn giản có viền đen và di chuyển tránh va chạm bằng AABB
+// Ánh xạ cố định 4 ứng viên nhân viên theo thứ tự STAFF_CANDIDATES sang biến thể mèo
+export function getStaffCatVariant(staffId: string): CatVariant {
+  const idx = STAFF_CANDIDATES.findIndex((c) => c.id === staffId);
+  return pickVariant(idx >= 0 ? idx : 0);
+}
+
+// Gắn tạp dề, mũ đồng phục theo vai trò và dụng cụ/ly trên tay mèo
+function attachStaffUniform(rig: CatRig, role: StaffMember['role']): void {
+  const isCleaner = role === 'cleaner';
+  const accentColor = isCleaner ? PALETTE.matchaGreen : PALETTE.pinkBlush;
+  const capColor = isCleaner ? PALETTE.matchaMint : PALETTE.teaBrown;
+  const apronColor = isCleaner ? PALETTE.creamWall : PALETTE.pinkSoft;
+
+  const apron = makeBox(0.32, 0.2, 0.03, apronColor, 0, -0.105, 0.208, 0.007);
+  apron.rotation.x = -0.09;
+  const pocket = makeBox(0.15, 0.085, 0.018, accentColor, 0, -0.115, 0.226, 0.005);
+  pocket.rotation.x = -0.09;
+  const waistBand = makeCylinder(0.202, 0.214, 0.04, accentColor, 0, -0.005, 0, 0.006);
+  rig.body.add(waistBand, apron, pocket);
+
+  const headTopY = CAT_HEAD_RADIUS * CAT_HEAD_SCALE.y;
+  const capCrown = makeCylinder(0.135, 0.148, 0.07, capColor, 0, headTopY - 0.005, 0.02, 0.007);
+  const capBrim = makeBox(0.18, 0.02, 0.1, capColor, 0, headTopY - 0.032, 0.12, 0.006);
+  capBrim.rotation.x = 0.12;
+  const capBadge = makeBox(0.065, 0.032, 0.02, accentColor, 0, headTopY - 0.002, 0.155, 0.004);
+  rig.head.add(capCrown, capBrim, capBadge);
+
+  if (isCleaner) {
+    const tool = new THREE.Group();
+    tool.rotation.x = 0.2;
+    tool.add(makeBox(0.04, 0.72, 0.04, PALETTE.teaBrown, 0, -0.02, 0, 0.006));
+    tool.add(makeBox(0.18, 0.06, 0.1, PALETTE.creamTrim, 0, -0.36, 0, 0.007));
+    rig.handAnchorL.add(tool);
+  } else {
+    const cup = new THREE.Group();
+    cup.add(makeCylinder(0.055, 0.042, 0.14, PALETTE.creamWall, 0, 0.03, 0.02, 0.007));
+    cup.add(makeCylinder(0.058, 0.058, 0.02, PALETTE.pinkSoft, 0, 0.105, 0.02, 0.006));
+    rig.handAnchorL.add(cup);
+  }
+}
+
+// Tạo nhân vật mèo nhân viên có đồng phục, viền đen và di chuyển tránh va chạm bằng AABB
 export function createStaffActor(
   member: StaffMember,
   colliders: readonly AabbBox[],
@@ -34,31 +80,22 @@ export function createStaffActor(
   const root = new THREE.Group();
   root.position.set(homeX, 0, homeZ);
 
-  const isCleaner = member.role === 'cleaner';
-  const shirtColor = isCleaner ? PALETTE.matchaGreen : PALETTE.pinkBlush;
-  const capColor = isCleaner ? PALETTE.matchaMint : PALETTE.teaBrown;
-  const apronColor = isCleaner ? PALETTE.creamWall : PALETTE.pinkSoft;
-
-  root.add(makeBox(0.12, 0.36, 0.12, PALETTE.teaDark, -0.09, 0.18, 0, 0.01));
-  root.add(makeBox(0.12, 0.36, 0.12, PALETTE.teaDark, 0.09, 0.18, 0, 0.01));
-  root.add(makeBox(0.36, 0.48, 0.22, shirtColor, 0, 0.62, 0, 0.012));
-  root.add(makeBox(0.3, 0.34, 0.04, apronColor, 0, 0.56, 0.12, 0.008));
-  root.add(makeBox(0.26, 0.26, 0.26, PALETTE.creamTrim, 0, 1.04, 0, 0.012));
-  root.add(makeBox(0.28, 0.09, 0.28, capColor, 0, 1.2, 0, 0.01));
-  root.add(makeBox(0.04, 0.04, 0.02, PALETTE.outline, -0.06, 1.05, 0.135, 0));
-  root.add(makeBox(0.04, 0.04, 0.02, PALETTE.outline, 0.06, 1.05, 0.135, 0));
-
-  if (isCleaner) {
-    root.add(makeBox(0.04, 0.72, 0.04, PALETTE.teaBrown, 0.24, 0.45, 0.1, 0.007));
-    root.add(makeBox(0.18, 0.06, 0.1, PALETTE.creamTrim, 0.24, 0.08, 0.1, 0.007));
-  } else {
-    root.add(makeBox(0.12, 0.16, 0.12, PALETTE.creamWall, 0.24, 0.66, 0.12, 0.008));
-  }
+  const variant = getStaffCatVariant(member.id);
+  const rig = createCat(variant.id, {
+    scale: HITBOX_HEIGHT / CAT_BASE_HEIGHT,
+    // Tránh chồng nón thường của biến thể mèo mướp với mũ đồng phục nhân viên
+    accessory: variant.accessory === 'hat' ? 'none' : variant.accessory,
+  });
+  attachStaffUniform(rig, member.role);
+  animateCat(rig, 'idle', 0);
+  root.add(rig.root);
 
   let animTime = 0;
   let detourTimer = 0;
   let detourSign = 1;
-  const fallAnim = createFallAnimation(root, 1.08);
+  let walkingInMove = false;
+  let idledInMove = false;
+  const fallAnim = createFallAnimation(root, STAFF_HEAD_STAR_Y);
 
   const faceToward = (tx: number, tz: number) => {
     const dx = tx - root.position.x;
@@ -86,6 +123,10 @@ export function createStaffActor(
       if (dist <= ARRIVE_DIST) {
         root.position.y = 0;
         detourTimer = 0;
+        walkingInMove = false;
+        idledInMove = true;
+        animTime += dt;
+        animateCat(rig, 'idle', animTime);
         return true;
       }
 
@@ -120,25 +161,53 @@ export function createStaffActor(
       root.position.x = next.x;
       root.position.z = next.z;
       animTime += dt;
-      root.position.y = Math.abs(Math.sin(animTime * 9)) * 0.035;
       if (moved > 1e-4) {
         root.rotation.y = Math.atan2(next.x - x, next.z - z);
       }
-      return Math.hypot(targetX - next.x, targetZ - next.z) <= ARRIVE_DIST;
+
+      const arrived = Math.hypot(targetX - next.x, targetZ - next.z) <= ARRIVE_DIST;
+      if (arrived) {
+        walkingInMove = false;
+        idledInMove = true;
+        root.position.y = 0;
+        animateCat(rig, 'idle', animTime);
+      } else {
+        walkingInMove = true;
+        idledInMove = false;
+        root.position.y = Math.abs(Math.sin(animTime * 9)) * 0.035;
+        animateCat(rig, 'walk', animTime, member.speed);
+      }
+      return arrived;
     },
 
     animateWork(active, dt) {
-      animTime += dt;
-      if (!active) {
-        root.position.y = 0;
-        root.rotation.z = 0;
+      if (active) {
+        walkingInMove = false;
+        idledInMove = false;
+        animTime += dt;
+        if (!fallAnim.isActive()) root.position.y = 0;
+        animateCat(rig, 'work', animTime, member.speed);
         return;
       }
-      root.position.y = Math.abs(Math.sin(animTime * 5)) * 0.03;
-      root.rotation.z = Math.sin(animTime * 6) * 0.08;
+      // Giữ nhịp đi bộ khi caller (vd: updateBarista) gọi moveToward rồi animateWork(false, dt) cùng frame
+      if (dt > 0 && walkingInMove) {
+        walkingInMove = false;
+        return;
+      }
+      if (dt > 0 && idledInMove) {
+        idledInMove = false;
+        return;
+      }
+      walkingInMove = false;
+      idledInMove = false;
+      animTime += dt;
+      if (!fallAnim.isActive()) root.position.y = 0;
+      animateCat(rig, 'idle', animTime);
     },
 
     triggerFall(dur, hitDir) {
+      walkingInMove = false;
+      idledInMove = false;
       fallAnim.trigger(dur, hitDir, root.rotation.y);
     },
 
@@ -152,9 +221,12 @@ export function createStaffActor(
 
     resetHome(x, z) {
       fallAnim.reset();
+      walkingInMove = false;
+      idledInMove = false;
       root.position.set(x, 0, z);
       root.rotation.set(0, 0, 0);
       detourTimer = 0;
+      animateCat(rig, 'idle', animTime);
     },
   };
 }

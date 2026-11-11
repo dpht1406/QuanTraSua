@@ -1,3 +1,4 @@
+import type * as THREE from 'three';
 import type { InputState } from './input.ts';
 import type { DrinkStationController } from '../gameplay/drinkStations.ts';
 import type { OrderManager } from '../gameplay/orderManager.ts';
@@ -13,6 +14,37 @@ import { createRestockPanel } from '../ui/restockPanel.ts';
 import { createShiftSummaryView } from '../ui/shiftSummary.ts';
 import { createStaffPanel } from '../ui/staffPanel.ts';
 import { createTutorialBox } from '../ui/tutorialBox.ts';
+import { createPlayerAvatar, type PlayerAvatar } from '../world/playerAvatar.ts';
+
+export interface PlayerAvatarController extends PlayerAvatar {
+  toggleSelfView(): boolean;
+  isSelfVisible(): boolean;
+}
+
+// Khởi tạo avatar mèo cho người chơi (mặc định ẩn với chính mình, nhấn V để bật/tắt kiểm tra)
+export function initPlayerAvatar(
+  scene: THREE.Scene,
+  camera: THREE.Camera,
+): PlayerAvatarController {
+  const avatar = createPlayerAvatar(scene, camera);
+  let selfVisible = false;
+  avatar.setVisibleToSelf(selfVisible);
+
+  return {
+    update: (dt) => avatar.update(dt),
+    setVisibleToSelf: (visible) => {
+      selfVisible = visible;
+      avatar.setVisibleToSelf(visible);
+    },
+    toggleSelfView: () => {
+      selfVisible = !selfVisible;
+      avatar.setVisibleToSelf(selfVisible);
+      return selfVisible;
+    },
+    isSelfVisible: () => selfVisible,
+    dispose: () => avatar.dispose(),
+  };
+}
 
 function getSafeLocalStorage(): StorageLike | null {
   try {
@@ -83,6 +115,7 @@ export function bindGameInput(
     tutorial: { isActive(): boolean; skip(): void };
     isMenuOpen: () => boolean;
     onEscape: () => void;
+    onToggleAvatar?: () => void;
   },
 ) {
   input.onInteract(() => {
@@ -100,6 +133,9 @@ export function bindGameInput(
   });
   input.onKey('KeyN', () => {
     if (deps.isLocked()) deps.shiftManager.confirmEarlyClose(false);
+  });
+  input.onKey('KeyV', () => {
+    if (deps.isLocked()) deps.onToggleAvatar?.();
   });
   input.onKey(TUTORIAL_SKIP_KEY, () => {
     if (deps.tutorial.isActive() && !deps.isMenuOpen()) deps.tutorial.skip();

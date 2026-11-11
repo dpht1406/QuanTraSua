@@ -2,7 +2,7 @@ import './style.css';
 import './ui/gameplayHud.css';
 import './ui/panels.css';
 import './ui/staffPanel.css';
-import { bindGameInput, createShopPanels, initStoresAndSave } from './core/bootstrap.ts';
+import { bindGameInput, createShopPanels, initPlayerAvatar, initStoresAndSave } from './core/bootstrap.ts';
 import { startGameLoop } from './core/gameLoop.ts';
 import { createInput } from './core/input.ts';
 import { createSceneSetup } from './core/sceneSetup.ts';
@@ -177,6 +177,8 @@ function bootstrap() {
     },
   );
 
+  const playerAvatar = initPlayerAvatar(scene, camera);
+
   bindGameInput(input, {
     isLocked: () => player.isLocked(),
     triggerInteract: () => interaction.trigger(),
@@ -189,6 +191,10 @@ function bootstrap() {
     onEscape: () => {
       if (panels.restockPanel.isOpen()) panels.restockPanel.close();
       if (panels.staffPanel.isOpen()) panels.staffPanel.close();
+    },
+    onToggleAvatar: () => {
+      const visible = playerAvatar.toggleSelfView();
+      hud.showHint(visible ? 'Hiện thân mèo (nhấn V để ẩn)' : 'Đã ẩn thân mèo');
     },
   });
 
@@ -228,6 +234,7 @@ function bootstrap() {
 
   startGameLoop(scene, camera, renderer, (dt) => {
     player.update(dt);
+    playerAvatar.update(dt);
     if (player.isLocked()) {
       interaction.update(dt, input.isDown('KeyE'));
       const target = interaction.getCurrentTarget()?.target ?? null;
