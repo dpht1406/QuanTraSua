@@ -233,3 +233,59 @@
   font-weight: 700;
   line-height: 1.4;
 }
+
+.toast {
+  z-index: 35;
+}
+
+.tutorial-box {
+  position: fixed;
+  bottom: 54px;
+  left: 16px;
+  width: 310px;
+  max-width: calc(100% - 32px);
+  z-index: 10;
+  background: rgba(255, 247, 238, 0.94);
+  border: 2.5px solid #1c1615;
+  border-radius: 14px;
+  padding: 10px 12px;
+  box-shadow: 0 3px 0 #1c1615;
+  pointer-events: none;
+}
+
+.tutorial-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.tutorial-badge { font-size: 11.5px; font-weight: 800; color: #7b4f34; }
+
+.tutorial-opt {
+  background: #ffe2c2;
+  border: 1.5px solid #1c1615;
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.tutorial-title { font-size: 14px; font-weight: 800; margin-bottom: 3px; }
+.tutorial-desc { font-size: 12.5px; line-height: 1.35; margin-bottom: 8px; }
+.tutorial-foot { display: flex; justify-content: flex-end; }
+
+.tutorial-skip-btn {
+  pointer-events: auto;
+  background: #ffe2c2;
+  color: #1c1615;
+  border: 2px solid #1c1615;
+  border-radius: 8px;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tutorial-skip-btn:hover { background: #fbd7de; }

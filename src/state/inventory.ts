@@ -63,3 +63,29 @@ export function createInventoryStore(
     },
   };
 }
+
+// Tính tổng tiền và nhập giỏ hàng nguyên liệu nếu đủ tiền
+export function purchaseRestockCart(
+  inventory: ReturnType<typeof createInventoryStore>,
+  cart: Partial<Record<InventoryItem, number>>,
+  money: number,
+): { ok: boolean; message: string; stock?: InventoryStock; money?: number } {
+  let total = 0;
+  for (const item of INVENTORY_ITEMS) {
+    const packs = cart[item] ?? 0;
+    if (packs > 0) total += costOf(item, packs);
+  }
+  if (total > money) {
+    return { ok: false, message: 'Không đủ tiền để nhập đơn hàng này!' };
+  }
+  for (const item of INVENTORY_ITEMS) {
+    const packs = cart[item] ?? 0;
+    if (packs > 0) inventory.restock(item, packs);
+  }
+  return {
+    ok: true,
+    message: 'Đã nhập hàng thành công!',
+    stock: inventory.getStock(),
+    money: money - total,
+  };
+}

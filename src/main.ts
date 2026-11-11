@@ -14,13 +14,10 @@ import { createInteractionSystem } from './interaction/interactionSystem.ts';
 import { createFirstPersonController } from './player/firstPersonController.ts';
 import { createCleanlinessStore } from './state/cleanliness.ts';
 import { gameStore } from './state/gameState.ts';
-import {
-  costOf,
-  createInventoryStore,
-  INVENTORY_ITEMS,
-  type InventoryItem,
-} from './state/inventory.ts';
+import { createInventoryStore, purchaseRestockCart } from './state/inventory.ts';
+import { applyLoadedSave, bindAutoSave, createSaveController, loadSave, type StorageLike } from './state/save.ts';
 import { createStaffStore } from './state/staff.ts';
+import { createTutorialController, TUTORIAL_SKIP_KEY } from './state/tutorial.ts';
 import { createHeldCupView } from './ui/heldCup.ts';
 import { createHud } from './ui/hud.ts';
 import { createLevelPicker } from './ui/levelPicker.ts';
@@ -29,19 +26,32 @@ import { createOrderTicket } from './ui/orderTicket.ts';
 import { createRestockPanel } from './ui/restockPanel.ts';
 import { createShiftSummaryView } from './ui/shiftSummary.ts';
 import { createStaffPanel } from './ui/staffPanel.ts';
+import { createTutorialBox } from './ui/tutorialBox.ts';
 import { createCleanlinessView } from './world/cleanlinessView.ts';
 import { createCustomerActor } from './world/customer.ts';
 import { createShopWorld } from './world/shopWorld.ts';
 
-// Khởi tạo toàn bộ game và kết nối uy tín, sự kiện ngẫu nhiên, nợ lương cùng pha chế
+function getSafeLocalStorage(): StorageLike | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+// Khởi tạo toàn bộ game và kết nối lưu/tải tiến trình, hướng dẫn, uy tín, sự kiện và pha chế
 function bootstrap() {
   const app = document.getElementById('app');
   if (!app) throw new Error('Không tìm thấy phần tử #app');
 
+  const storage = getSafeLocalStorage();
+  const loadRes = loadSave(storage);
+  const loaded = loadRes.data;
+
   const { scene, camera, renderer, setDimmed } = createSceneSetup(app);
   const input = createInput();
 
-  const inventory = createInventoryStore(undefined, (stock, spentCost) => {
+  const inventory = createInventoryStore(loaded?.inventory, (stock, spentCost) => {
     gameStore.bus.emit('stockChanged', { stock, spentCost });
   });
 
@@ -53,6 +63,29 @@ function bootstrap() {
     },
   });
   const staffStore = createStaffStore(gameStore.bus);
+  if (loaded) applyLoadedSave(loaded, gameStore, cleanliness, staffStore);
+
+  const tutorialBox = createTutorialBox(app, () => tutorial.skip());
+  let saveCtrl: ReturnType<typeof createSaveController>;
+  const tutorial = createTutorialController(gameStore.bus, {
+    initialDone: loaded?.tutorialDone ?? false,
+    onChange: (view) => tutorialBox.render(view),
+    onDone: () => saveCtrl.saveTutorialDone(),
+  });
+  saveCtrl = createSaveController({
+    storage,
+    initialSave: loaded,
+    getSnapshot: () => ({
+      state: gameStore.getState(),
+      inventory: inventory.getStock(),
+      staff: staffStore.getHired(),
+      stains: cleanliness.getStains(),
+      tutorialDone: tutorial.isDone(),
+    }),
+    onStorageError: () => gameStore.bus.emit('toast:show', { message: 'Không lưu được tiến trình' }),
+  });
+  bindAutoSave(gameStore.bus, saveCtrl);
+  tutorialBox.render(tutorial.getView());
 
   const world = createShopWorld((message) => {
     gameStore.bus.emit('toast:show', { message });
@@ -70,6 +103,7 @@ function bootstrap() {
     hud.setRelockVisible(false);
     player.lock();
   });
+  if (!storage || loadRes.storageError) saveCtrl.notifyUnavailable();
   const orderTicket = createOrderTicket(app);
   const levelPicker = createLevelPicker(app);
   const heldCupUi = createHeldCupView(app);
@@ -111,26 +145,12 @@ function bootstrap() {
   const restockPanel = createRestockPanel(
     app,
     (cart) => {
-      let total = 0;
-      for (const item of INVENTORY_ITEMS) {
-        const packs = cart[item] ?? 0;
-        if (packs > 0) total += costOf(item, packs);
+      const res = purchaseRestockCart(inventory, cart, gameStore.getState().money);
+      if (res.ok && res.money !== undefined) {
+        gameStore.updateState({ money: res.money });
+        saveCtrl.saveIfAllowed();
       }
-      const prevMoney = gameStore.getState().money;
-      if (total > prevMoney) {
-        return { ok: false, message: 'Không đủ tiền để nhập đơn hàng này!' };
-      }
-      for (const item of INVENTORY_ITEMS) {
-        const packs = cart[item as InventoryItem] ?? 0;
-        if (packs > 0) inventory.restock(item, packs);
-      }
-      const updated = gameStore.updateState({ money: prevMoney - total });
-      return {
-        ok: true,
-        message: 'Đã nhập hàng thành công!',
-        stock: inventory.getStock(),
-        money: updated.money,
-      };
+      return res;
     },
     () => hud.setRelockVisible(true),
   );
@@ -145,6 +165,7 @@ function bootstrap() {
   const shiftSummary = createShiftSummaryView(app, () => {
     suppressPauseOverlay = false;
     shiftManager.nextDay();
+    saveCtrl.saveIfAllowed();
     orderTicket.setOrder(null, 'closed');
     player.lock();
   });
@@ -196,10 +217,19 @@ function bootstrap() {
     () => shopEvents.isPowerOutage(),
   );
 
-  const menu = createMenuOverlay(app, () => {
-    suppressPauseOverlay = false;
-    hud.setRelockVisible(false);
-    player.lock();
+  const menu = createMenuOverlay(app, {
+    saveSummary: loaded ? { day: loaded.day, money: loaded.money, reputation: loaded.reputation } : null,
+    canRestart: () => gameStore.getState().shiftState === 'closed',
+    onEnterGame: () => {
+      suppressPauseOverlay = false;
+      hud.setRelockVisible(false);
+      player.lock();
+    },
+    onRestartGame: () => {
+      // shortcut: xóa save rồi tải lại trang để khởi tạo sạch toàn bộ state và cảnh 3D; nâng cấp sau bằng reset in-memory nếu cần
+      saveCtrl.clear();
+      window.location.reload();
+    },
   });
 
   player = createFirstPersonController(
@@ -234,6 +264,9 @@ function bootstrap() {
   });
   input.onKey('KeyN', () => {
     if (player.isLocked()) shiftManager.confirmEarlyClose(false);
+  });
+  input.onKey(TUTORIAL_SKIP_KEY, () => {
+    if (tutorial.isActive() && !menu.isOpen()) tutorial.skip();
   });
   input.onKey('Escape', () => {
     if (restockPanel.isOpen()) restockPanel.close();

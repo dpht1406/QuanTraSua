@@ -148,6 +148,19 @@ export function createStaffStore(bus?: EventBus<GameEvents>) {
       bus?.emit('staffFired', { staff: highest, reason });
       return highest;
     },
+
+    // Khôi phục danh sách nhân viên đã thuê từ save (tối đa 2 người, mỗi vai trò 1 người)
+    restoreHired(ids: readonly string[]): void {
+      const next: StaffMember[] = [];
+      for (const id of ids) {
+        if (next.length >= MAX_STAFF) break;
+        const candidate = candidates.find((c) => c.id === id);
+        if (!candidate) continue;
+        if (next.some((s) => s.id === candidate.id || s.role === candidate.role)) continue;
+        next.push({ ...candidate });
+      }
+      hired = next;
+    },
   };
 }
 

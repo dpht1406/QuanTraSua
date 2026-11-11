@@ -40,6 +40,7 @@ import {
 } from './shift.ts';
 import { buildBaristaCup, createStaffStore } from './staff.ts';
 import { runPhase5aSelfCheck } from './selfCheck5a.ts';
+import { runPhase5bSelfCheck } from './selfCheck5b.ts';
 import { resolveAabbMove, type AabbBox } from '../player/collision.ts';
 
 // Tự kiểm tra GameState: giá trị mặc định và cập nhật
@@ -236,4 +237,5 @@ assert.equal(consumeCupIngredients(cleanCup.cup, (it, q) => cupInv.consume(it, q
 assert.equal(cupInv.getCount('matcha'), INVENTORY_CONFIG.matcha.initial - 1);
 
 runPhase5aSelfCheck();
-console.log('Self-check OK: GameState, EventBus, AABB, Menu, Scoring, Inventory, Shift, Cleanliness, Staff, Phase 5a');
+runPhase5bSelfCheck();
+console.log('Self-check OK: GameState, EventBus, AABB, Menu, Scoring, Inventory, Shift, Cleanliness, Staff, Phase 5a, Phase 5b');

@@ -22,6 +22,7 @@ import type { ShiftState } from './shift.ts';
 
 export interface ReputationOptions {
   initialValue?: number;
+  initialCleanliness?: number;
   onSync?: (value: number) => void;
   getOrderMultiplier?: () => number;
 }
@@ -43,7 +44,7 @@ export function createReputationStore(
 ) {
   let value = clampReputation(options.initialValue ?? 50);
   let shiftStartValue = value;
-  let latestCleanliness = 100;
+  let latestCleanliness = options.initialCleanliness ?? 100;
   let dirtyTimerSec = 0;
 
   const adjust = (delta: number, reason: string): number => {

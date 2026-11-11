@@ -27,6 +27,7 @@ export function createShopEventsBridge(
   const randomEvents = createRandomEventManager(gameStore.bus);
   const reputation = createReputationStore(gameStore.bus, {
     initialValue: gameStore.getState().reputation,
+    initialCleanliness: gameStore.getState().cleanliness,
     onSync: (value) => gameStore.updateState({ reputation: value }),
     getOrderMultiplier: () => (randomEvents.isPickyOrderActive() ? PICKY_REP_MULTIPLIER : 1),
   });

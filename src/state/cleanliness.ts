@@ -200,6 +200,22 @@ export function createCleanlinessStore(
     cleanStain,
     emptyTrash,
 
+    restoreStains(items: readonly StainItem[]): void {
+      const prev = cleanliness;
+      stains = items.map((s) => ({ ...s }));
+      let maxNum = 0;
+      for (const s of stains) {
+        const match = /^stain_(\d+)$/.exec(s.id);
+        if (match) maxNum = Math.max(maxNum, Number(match[1]));
+      }
+      nextId = Math.max(nextId, maxNum + 1);
+      trashCups = stains.some((s) => s.kind === 'full_trash') ? TRASH_FULL_CUPS : 0;
+      spawnTimerSec = 0;
+      servedSinceDirtyTable = 0;
+      cleanliness = calcCleanliness(stains);
+      config.onSync?.(cleanliness, cleanliness - prev, stains);
+    },
+
     update(dt: number, shiftState: ShiftState): void {
       if (shiftState !== 'open') return;
       spawnTimerSec += dt;
