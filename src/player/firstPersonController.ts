@@ -5,6 +5,7 @@ import { resolveAabbMove, type AabbBox } from './collision.ts';
 
 export interface FirstPersonController {
   lock(): void;
+  unlock(): void;
   isLocked(): boolean;
   update(dt: number): void;
   dispose(): void;
@@ -45,6 +46,12 @@ export function createFirstPersonController(
         controls.lock();
       } catch {
         // Trình duyệt có thể từ chối khóa chuột nếu bấm quá sát lúc vừa nhấn Esc
+      }
+    },
+
+    unlock() {
+      if (controls.isLocked) {
+        controls.unlock();
       }
     },
 

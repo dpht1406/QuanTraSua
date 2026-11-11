@@ -52,6 +52,18 @@ canvas {
   background: #fbd7de;
 }
 
+.hud-clean.good {
+  background: #cbe5ce;
+}
+
+.hud-clean.mid {
+  background: #ffe2c2;
+}
+
+.hud-clean.low {
+  background: #f6b0bc;
+}
+
 .crosshair {
   position: absolute;
   top: 50%;
@@ -77,6 +89,26 @@ canvas {
   font-size: 14px;
   box-shadow: 0 3px 0 #1c1615;
   white-space: nowrap;
+}
+
+.hold-progress {
+  position: absolute;
+  top: calc(50% + 64px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 170px;
+  height: 11px;
+  background: #fff7ee;
+  border: 2px solid #1c1615;
+  border-radius: 99px;
+  overflow: hidden;
+  box-shadow: 0 2px 0 #1c1615;
+}
+
+.hold-fill {
+  height: 100%;
+  width: 0%;
+  background: #a2c9a6;
 }
 
 .toast {

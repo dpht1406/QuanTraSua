@@ -59,6 +59,16 @@
   font-weight: 700;
 }
 
+.order-staff-lock {
+  background: #cbe5ce;
+  border: 1.5px solid #1c1615;
+  border-radius: 7px;
+  padding: 3px 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .patience-track {
   height: 8px;
   background: #f1d2b1;

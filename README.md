@@ -1,4 +1,4 @@
-# Quán Trà Sữa Pastel 3D (Giai đoạn 2)
+# Quán Trà Sữa Pastel 3D (Giai đoạn 3)
 
 Game mô phỏng bán trà sữa góc nhìn thứ nhất trên trình duyệt bằng Vite + TypeScript + Three.js, phong cách đồ họa cartoon pastel có viền đen.
 
@@ -7,7 +7,7 @@ Game mô phỏng bán trà sữa góc nhìn thứ nhất trên trình duyệt b�
 ```bash
 npm install
 npm run dev      # Chạy server phát triển
-npm run check    # Kiểm tra TypeScript và self-check logic (GameState, EventBus, AABB, Menu, Scoring)
+npm run check    # Kiểm tra TypeScript và self-check logic (GameState, EventBus, AABB, Menu, Scoring, Inventory, Shift)
 npm run build    # Build bản tĩnh ra thư mục dist/
 ```
 
@@ -16,20 +16,21 @@ npm run build    # Build bản tĩnh ra thư mục dist/
 - **Chuột**: Xoay góc nhìn (sau khi bấm **Vào quán**)
 - **W / A / S / D**: Di chuyển
 - **Shift**: Chạy nhẹ
-- **E**: Tương tác với trạm pha chế / vật thể trong tầm 2m
-- **1 / 2 / 3**: Chọn loại trà nền, lượng đá, lượng đường hoặc topping khi đứng tại trạm
-- **Esc**: Mở khóa chuột / hiện menu tạm dừng
+- **E**: Tương tác với cửa quán (mở/kết ca), máy tính nhập hàng và trạm pha chế (tầm 2m)
+- **1 / 2 / 3**: Chọn loại trà nền, lượng đá, lượng đường hoặc topping
+- **Y / N**: Xác nhận hoặc hủy kết ca sớm tại cửa
+- **Esc**: Đóng bảng nhập hàng hoặc tạm dừng game
 
 ## Cấu trúc thư mục
 
 ```text
 src/
-  core/         # Game loop, quản lý bàn phím (WASD/E/1/2/3), khởi tạo scene/camera/renderer
-  world/        # Dựng quán 10x8m, các trạm pha chế và nhân vật khách hàng đi theo waypoint
+  core/         # Game loop, quản lý bàn phím (WASD/E/1-3/Y/N/Esc), khởi tạo scene
+  world/        # Dựng quán 10x8m, trạm pha chế, máy tính nhập hàng và khách hàng waypoint
   player/       # Điều khiển góc nhìn thứ nhất và va chạm AABB
   interaction/  # Raycast tầm 2m từ tâm ngắm và kích hoạt phím E
-  state/        # GameState, EventBus, menu, constants, scoring (thuần TypeScript) và self-check
-  gameplay/     # Quản lý đơn/khách (orderManager) và nối quy trình pha 7 bước (drinkStations)
-  ui/           # HUD, phiếu đơn, bảng chọn 1/2/3, ly đang cầm, màn hình bắt đầu/tạm dừng
+  state/        # GameState, EventBus, menu, constants, scoring, inventory, shift (thuần TS) + self-check
+  gameplay/     # Quản lý ca (shiftManager), đơn/khách (orderManager) và pha chế (drinkStations)
+  ui/           # HUD, phiếu đơn, bảng chọn 1/2/3, ly đang cầm, bảng nhập hàng, tổng kết ca
   styles/       # Bảng màu pastel (palette.ts) và hàm tạo viền (outline.ts)
 ```

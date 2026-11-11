@@ -2,15 +2,17 @@ export interface InputState {
   isDown(code: string): boolean;
   onInteract(cb: () => void): () => void;
   onDigit(cb: (digit: 1 | 2 | 3) => void): () => void;
+  onKey(code: string, cb: () => void): () => void;
   clear(): void;
   dispose(): void;
 }
 
-// Quản lý bàn phím WASD/Shift, phím tương tác E và phím chọn 1/2/3
+// Quản lý bàn phím WASD/Shift, phím E, chọn 1/2/3 và phím tắt Y/N/Esc
 export function createInput(): InputState {
   const pressed = new Set<string>();
   const interactListeners = new Set<() => void>();
   const digitListeners = new Set<(digit: 1 | 2 | 3) => void>();
+  const keyListeners = new Map<string, Set<() => void>>();
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.repeat) return;
@@ -23,6 +25,10 @@ export function createInput(): InputState {
       for (const cb of digitListeners) cb(2);
     } else if (event.code === 'Digit3' || event.code === 'Numpad3') {
       for (const cb of digitListeners) cb(3);
+    }
+    const listeners = keyListeners.get(event.code);
+    if (listeners) {
+      for (const cb of listeners) cb();
     }
   };
 
@@ -49,6 +55,15 @@ export function createInput(): InputState {
     onDigit(cb) {
       digitListeners.add(cb);
       return () => digitListeners.delete(cb);
+    },
+    onKey(code, cb) {
+      let set = keyListeners.get(code);
+      if (!set) {
+        set = new Set();
+        keyListeners.set(code, set);
+      }
+      set.add(cb);
+      return () => set?.delete(cb);
     },
     clear,
     dispose() {

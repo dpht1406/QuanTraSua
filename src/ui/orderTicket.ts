@@ -1,8 +1,9 @@
 import { DRINK_LABELS, TOPPING_LABELS } from '../state/menu.ts';
+import type { ShiftState } from '../state/shift.ts';
 import type { ActiveOrderView } from '../gameplay/orderManager.ts';
 
 export interface OrderTicketView {
-  setOrder(view: ActiveOrderView | null): void;
+  setOrder(view: ActiveOrderView | null, shiftState?: ShiftState): void;
   showResult(text: string, positive: boolean): void;
   dispose(): void;
 }
@@ -17,7 +18,7 @@ export function createOrderTicket(root: HTMLElement): OrderTicketView {
         <span>Phiếu đơn</span>
         <span class="order-timer" data-el="timer">--</span>
       </div>
-      <div class="order-body" data-el="body">Chờ khách tới quầy...</div>
+      <div class="order-body" data-el="body">Quán đang đóng · Ra cửa mở ca</div>
       <div class="patience-track"><div class="patience-fill" data-el="fill"></div></div>
     </div>
     <div class="order-result hidden" data-el="result"></div>
@@ -32,16 +33,22 @@ export function createOrderTicket(root: HTMLElement): OrderTicketView {
   let resultTimer: number | undefined;
 
   return {
-    setOrder(view) {
+    setOrder(view, shiftState = 'closed') {
       if (!view) {
         timerEl.textContent = '--';
-        bodyEl.innerHTML = '<div class="order-wait">Chờ khách tới quầy...</div>';
+        const waitText =
+          shiftState === 'open'
+            ? 'Chờ khách tới quầy...'
+            : shiftState === 'closing'
+              ? 'Đang đóng cửa...'
+              : 'Quán đang đóng · Ra cửa mở ca';
+        bodyEl.innerHTML = `<div class="order-wait">${waitText}</div>`;
         fillEl.style.width = '0%';
         fillEl.classList.remove('low');
         return;
       }
 
-      const { order, remainingSec, ratio } = view;
+      const { order, remainingSec, ratio, lockedByStaff } = view;
       timerEl.textContent = `${Math.ceil(remainingSec)}s`;
       bodyEl.innerHTML = `
         <div class="order-drink">${DRINK_LABELS[order.base]}</div>
@@ -50,6 +57,7 @@ export function createOrderTicket(root: HTMLElement): OrderTicketView {
           <span>Đá ${order.ice}%</span>
           <span>${TOPPING_LABELS[order.topping]}</span>
         </div>
+        ${lockedByStaff ? `<div class="order-staff-lock">${lockedByStaff} đang pha...</div>` : ''}
       `;
       fillEl.style.width = `${Math.max(0, Math.min(100, ratio * 100))}%`;
       fillEl.classList.toggle('low', ratio <= 0.3);

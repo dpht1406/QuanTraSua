@@ -1,3 +1,4 @@
+import type { InventoryItem, InventoryStock } from './inventory.ts';
 import {
   MAX_TIME_PENALTY,
   PAYOUT_ROUND_STEP,
@@ -12,12 +13,15 @@ import {
   type ToppingType,
 } from './menu.ts';
 
+export type CupStep = 'base' | 'sugar' | 'ice' | 'topping';
+
 export interface Cup {
   base: DrinkBase | null;
   sugar: LevelPercent | null;
   ice: LevelPercent | null;
   topping: ToppingType | null;
   sealed: boolean;
+  charged?: Partial<Record<CupStep, boolean>>;
 }
 
 export interface ScoreResult {
@@ -86,4 +90,64 @@ export function scoreDrink(
   const payout = Math.round(rawPayout / PAYOUT_ROUND_STEP) * PAYOUT_ROUND_STEP;
 
   return { accuracy, timeFactor, total, stars, payout };
+}
+
+export interface CupStepValue {
+  base: DrinkBase;
+  sugar: LevelPercent;
+  ice: LevelPercent;
+  topping: ToppingType;
+}
+
+// Chỉ trừ nguyên liệu khi bước đó chưa từng tiêu hao trên ly (đổi lựa chọn sau không trừ thêm/hoàn)
+export function applyCupStep<K extends CupStep>(
+  cup: Cup,
+  step: K,
+  value: CupStepValue[K],
+  consume: (item: InventoryItem) => boolean,
+): { ok: boolean; missingItem?: InventoryItem } {
+  const charged = (cup.charged ??= {});
+  let item: InventoryItem | null = null;
+  if (step === 'base') item = value as DrinkBase;
+  else if (step === 'sugar' && (value as LevelPercent) > 0) item = 'sugar';
+  else if (step === 'ice' && (value as LevelPercent) > 0) item = 'ice';
+  else if (step === 'topping' && value !== 'none') item = value as Exclude<ToppingType, 'none'>;
+
+  if (!charged[step] && item) {
+    if (!consume(item)) return { ok: false, missingItem: item };
+    charged[step] = true;
+  }
+
+  cup[step] = value as Cup[K];
+  return { ok: true };
+}
+
+// Liệt kê nguyên liệu cần để hoàn tất 1 ly (dùng cho nhân viên kiểm tra và trừ kho chung)
+export function getCupRequiredItems(cup: Cup): InventoryItem[] {
+  const items: InventoryItem[] = ['cup'];
+  if (cup.base) items.push(cup.base);
+  if (cup.sugar && cup.sugar > 0) items.push('sugar');
+  if (cup.ice && cup.ice > 0) items.push('ice');
+  if (cup.topping && cup.topping !== 'none') items.push(cup.topping);
+  if (cup.sealed) items.push('lid');
+  return items;
+}
+
+// Kiểm tra món còn thiếu trước khi nhân viên bắt đầu pha để tránh trừ dở dang
+export function findMissingCupItem(cup: Cup, stock: InventoryStock): InventoryItem | null {
+  for (const item of getCupRequiredItems(cup)) {
+    if (stock[item] < 1) return item;
+  }
+  return null;
+}
+
+// Trừ toàn bộ nguyên liệu của 1 ly vào kho dùng chung
+export function consumeCupIngredients(
+  cup: Cup,
+  consume: (item: InventoryItem, qty?: number) => boolean,
+): boolean {
+  for (const item of getCupRequiredItems(cup)) {
+    if (!consume(item, 1)) return false;
+  }
+  return true;
 }

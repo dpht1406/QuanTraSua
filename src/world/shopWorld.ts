@@ -11,7 +11,9 @@ import {
   buildFridge,
   buildMenuBoard,
   buildMopSet,
+  buildRestockPc,
   buildShelf,
+  buildStaffBoard,
   buildTableSet,
   buildTeaMachine,
   buildTrashCan,
@@ -19,6 +21,9 @@ import {
 } from './furniture.ts';
 
 export interface ShopStations {
+  door: THREE.Object3D;
+  restockPc: THREE.Object3D;
+  staffBoard: THREE.Object3D;
   cupRack: THREE.Object3D;
   teaMachine: THREE.Object3D;
   fridge: THREE.Object3D;
@@ -34,6 +39,7 @@ export interface ShopWorld {
   colliders: AabbBox[];
   interactables: Interactable[];
   stations: ShopStations;
+  tables: THREE.Group[];
 }
 
 // Dựng toàn bộ không gian quán trà sữa 10x8m cùng collider, trạm pha chế và đồ trang trí
@@ -104,11 +110,16 @@ export function createShopWorld(onNotify: (msg: string) => void): ShopWorld {
     { minX: -5.2, maxX: 5.2, minZ: 4.0, maxZ: 4.2 },
   );
 
-  // Cửa ra vào
+  // Cửa ra vào (nối với hệ thống mở/kết ca)
   const door = buildDoor();
   door.position.set(0, 0, 4.1);
   root.add(door);
-  registerDecor(door, 'Kiểm tra cửa quán', 'Cửa quán đang mở đón khách!');
+
+  // Máy tính nhập hàng đặt cạnh kệ nguyên liệu ở tường sau
+  const restockPc = buildRestockPc();
+  restockPc.position.set(-0.2, 0, -3.66);
+  root.add(restockPc);
+  colliders.push({ minX: -0.62, maxX: 0.22, minZ: -3.95, maxZ: -3.37 });
 
   // Quầy pha chế (dài 4m từ x=-3.85..+0.25 để chừa lối đi >= 1.15m ở hai đầu vào khu sau quầy)
   const counter = buildCounter();
@@ -135,11 +146,15 @@ export function createShopWorld(onNotify: (msg: string) => void): ShopWorld {
   root.add(shelf.root);
   colliders.push({ minX: -3.08, maxX: -1.02, minZ: -3.94, maxZ: -3.42 });
 
-  // Bảng menu treo tường
+  // Bảng menu treo tường và bảng nhân viên
   const menuBoard = buildMenuBoard();
   menuBoard.position.set(0.35, 1.95, -3.96);
   root.add(menuBoard);
   registerDecor(menuBoard, 'Xem bảng menu', 'Trà sữa 30k · Trà đào 35k · Matcha 40k (+5k topping)');
+
+  const staffBoard = buildStaffBoard();
+  staffBoard.position.set(2.45, 1.72, -3.96);
+  root.add(staffBoard);
 
   // Tủ lạnh / thùng đá
   const fridge = buildFridge();
@@ -153,33 +168,38 @@ export function createShopWorld(onNotify: (msg: string) => void): ShopWorld {
   root.add(trashCan);
   colliders.push({ minX: 0.39, maxX: 0.85, minZ: -1.73, maxZ: -1.27 });
 
-  // Chổi lau nhà
+  // Chổi lau nhà (hiển thị trang trí; người chơi dùng dụng cụ lau mặc định)
   const mopSet = buildMopSet();
   mopSet.position.set(4.35, 0, -3.35);
   root.add(mopSet);
   colliders.push({ minX: 4.05, maxX: 4.65, minZ: -3.65, maxZ: -3.05 });
-  registerDecor(mopSet, 'Kiểm tra chổi lau nhà', 'Dụng cụ vệ sinh sẵn sàng (dùng ở giai đoạn sau)!');
+  registerDecor(mopSet, 'Kiểm tra chổi lau nhà', 'Chổi sẵn sàng — nhìn vào vết bẩn và giữ E để lau!');
 
-  // 4 bộ bàn ghế khách
+  // 4 bộ bàn ghế khách (tương tác bàn bẩn/sạch được gắn ở cleanlinessView)
   const tableCoords: Array<[number, number]> = [
     [3.1, -1.7],
     [3.1, 0.4],
     [3.1, 2.5],
     [-3.1, 1.8],
   ];
-  tableCoords.forEach(([tx, tz], idx) => {
+  const tables: THREE.Group[] = [];
+  for (const [tx, tz] of tableCoords) {
     const tableSet = buildTableSet();
     tableSet.position.set(tx, 0, tz);
     root.add(tableSet);
+    tables.push(tableSet);
     colliders.push({ minX: tx - 0.94, maxX: tx + 0.94, minZ: tz - 0.42, maxZ: tz + 0.42 });
-    registerDecor(tableSet, `Kiểm tra bàn ${idx + 1}`, `Bàn số ${idx + 1} sạch sẽ!`);
-  });
+  }
 
   return {
     root,
     colliders,
     interactables,
+    tables,
     stations: {
+      door,
+      restockPc,
+      staffBoard,
       cupRack,
       teaMachine,
       fridge,

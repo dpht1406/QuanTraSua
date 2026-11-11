@@ -223,3 +223,33 @@ export function buildMopSet(): THREE.Group {
   group.add(mopStick);
   return group;
 }
+
+// Dựng bàn và máy tính nhập hàng đặt gần tường sau
+export function buildRestockPc(): THREE.Group {
+  const group = new THREE.Group();
+  // Bàn máy tính nhỏ
+  group.add(makeBox(0.76, 0.05, 0.5, PALETTE.teaBrown, 0, 0.74, 0));
+  for (const lx of [-0.32, 0.32]) {
+    for (const lz of [-0.2, 0.2]) {
+      group.add(makeBox(0.05, 0.72, 0.05, PALETTE.teaDark, lx, 0.36, lz));
+    }
+  }
+  // Màn hình và bàn phím pastel
+  group.add(makeBox(0.16, 0.12, 0.12, PALETTE.steelSoft, 0, 0.82, -0.1, 0.008));
+  group.add(makeBox(0.52, 0.34, 0.04, PALETTE.pinkBlush, 0, 1.03, -0.1, 0.01));
+  group.add(makeBox(0.46, 0.28, 0.02, PALETTE.glassBlue, 0, 1.03, -0.08, 0.005));
+  group.add(makeBox(0.36, 0.03, 0.14, PALETTE.creamWall, -0.05, 0.78, 0.12, 0.007));
+  group.add(makeBox(0.07, 0.03, 0.1, PALETTE.pinkSoft, 0.22, 0.78, 0.12, 0.006));
+  return group;
+}
+
+// Dựng bảng thông báo treo tường để mở bảng thuê/sa thải nhân viên
+export function buildStaffBoard(): THREE.Group {
+  const group = new THREE.Group();
+  group.add(makeBox(1.28, 0.88, 0.05, PALETTE.teaDark, 0, 0, 0));
+  group.add(makeBox(1.14, 0.74, 0.03, PALETTE.creamTrim, 0, 0, 0.025, 0.008));
+  group.add(makeBox(0.36, 0.26, 0.02, PALETTE.pinkSoft, -0.28, 0.12, 0.045, 0.006));
+  group.add(makeBox(0.36, 0.26, 0.02, PALETTE.matchaMint, 0.24, 0.12, 0.045, 0.006));
+  group.add(makeBox(0.54, 0.2, 0.02, PALETTE.creamWall, 0, -0.18, 0.045, 0.006));
+  return group;
+}

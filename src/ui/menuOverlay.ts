@@ -1,5 +1,5 @@
 export interface MenuOverlay {
-  setLocked(locked: boolean): void;
+  setLocked(locked: boolean, suppressOverlay?: boolean): void;
   dispose(): void;
 }
 
@@ -38,9 +38,9 @@ export function createMenuOverlay(
   btnEl.addEventListener('click', onClick);
 
   return {
-    setLocked(locked) {
-      overlay.classList.toggle('hidden', locked);
-      if (!locked && hasStarted) {
+    setLocked(locked, suppressOverlay = false) {
+      overlay.classList.toggle('hidden', locked || suppressOverlay);
+      if (!locked && !suppressOverlay && hasStarted) {
         titleEl.textContent = 'Tạm dừng';
         descEl.textContent = 'Bấm nút bên dưới để tiếp tục phục vụ quán';
         btnEl.textContent = 'Tiếp tục';
