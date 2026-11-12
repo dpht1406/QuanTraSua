@@ -2,6 +2,10 @@ import type * as THREE from 'three';
 import type { InputState } from '../core/input.ts';
 import type { LightingController } from '../core/lighting.ts';
 import type { InteractionSystem } from '../interaction/interactionSystem.ts';
+import type { ActorBodies } from '../physics/actorBodies.ts';
+import type { FurnitureBodies } from '../physics/furnitureBodies.ts';
+import type { PhysicsWorld } from '../physics/physicsTypes.ts';
+import type { PlayerBody } from '../physics/playerBody.ts';
 import type { AabbBox } from '../player/collision.ts';
 import type { FirstPersonController } from '../player/firstPersonController.ts';
 import type { CleanlinessStore } from '../state/cleanliness.ts';
@@ -37,6 +41,10 @@ export interface GameCtx {
   colliders: AabbBox[];
   shopWorld: ShopWorld;
   customer: CustomerActor;
+  physics: PhysicsWorld;
+  playerBody: PlayerBody;
+  actorBodies: ActorBodies;
+  furnitureBodies: FurnitureBodies;
   eventBus: EventBus<GameEvents>;
   gameStore: GameStore;
   storage: StorageLike | null;
@@ -53,4 +61,5 @@ export interface GameCtx {
   heldCupUi: HeldCupView;
   saveCtrl: SaveController;
   registerTick(fn: (dt: number) => void): () => void;
+  registerPostPhysicsTick?(fn: (dt: number) => void): () => void;
 }

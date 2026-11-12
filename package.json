@@ -7,9 +7,10 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "check": "tsc --noEmit && node src/state/selfCheck.ts && node src/world/selfCheck7World.ts && node src/world/selfCheck8World.ts"
+    "check": "tsc --noEmit && node src/state/selfCheck.ts && node src/world/selfCheck7World.ts && node src/world/selfCheck8World.ts && node src/physics/selfCheck9.ts"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
     "three": "^0.187.0"
   },
   "devDependencies": {

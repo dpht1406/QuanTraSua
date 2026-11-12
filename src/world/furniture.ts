@@ -6,11 +6,13 @@ import { makePartBox, makePartCylinder } from './furniturePrimitives.ts';
 import { getWoodTableTexture } from './textures.ts';
 
 export {
+  buildChair,
   buildDoor,
   buildMenuBoard,
   buildMopSet,
   buildRestockPc,
   buildStaffBoard,
+  buildTable,
   buildTableSet,
   buildTrashCan,
 } from './furnitureDecor.ts';

@@ -1,8 +1,13 @@
+export type StaticColliderTag = 'wall' | 'floor' | 'table' | 'counter' | 'bin' | 'machine' | 'rack';
+
 export interface AabbBox {
   minX: number;
   maxX: number;
   minZ: number;
   maxZ: number;
+  minY?: number;
+  maxY?: number;
+  tag?: StaticColliderTag;
 }
 
 export interface Point2D {
@@ -12,7 +17,7 @@ export interface Point2D {
 
 const EPS = 1e-4;
 
-// Kiểm tra hộp người chơi có giao với một hộp AABB trên mặt phẳng XZ không
+// Kiểm tra hình tròn bán kính r có giao với một hộp AABB trên mặt phẳng XZ không
 export function overlapsAabb(x: number, z: number, radius: number, box: AabbBox): boolean {
   return (
     x + radius > box.minX &&
@@ -22,7 +27,7 @@ export function overlapsAabb(x: number, z: number, radius: number, box: AabbBox)
   );
 }
 
-// Giải quyết va chạm AABB tách trục X/Z để người chơi dừng sát vật cản và trượt dọc tường
+// Giải quyết va chạm AABB tách trục X/Z cho AI nhân viên dừng sát vật cản và trượt dọc tường
 export function resolveAabbMove(
   x: number,
   z: number,
@@ -31,7 +36,6 @@ export function resolveAabbMove(
   radius: number,
   colliders: readonly AabbBox[],
 ): Point2D {
-  // shortcut: chỉ xét va chạm 2D trên mặt sàn (XZ), nâng cấp lên 3D khi có nhảy hoặc bậc thang
   let nextX = targetX;
   const dx = targetX - x;
 

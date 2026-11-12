@@ -1,19 +1,11 @@
 import assert from 'node:assert/strict';
 import { discardCupInBin } from '../gameplay/cupDisposal.ts';
-import {
-  createProjectileWorld,
-  type Box3D,
-  type PhysicsSurface,
-} from '../gameplay/projectilePhysics.ts';
 import { createCleanlinessStore } from './cleanliness.ts';
 import { INVENTORY_CONFIG } from './constants.ts';
 import {
   CUP_BREAK_POWER,
   DROP_POWER,
-  MAX_FLYING,
-  MAX_LANDED,
   MAX_STAFF_HITS_PER_DAY,
-  STUCK_SEC,
   STUN_SEC,
 } from './constantsThrow.ts';
 import { createEventBus } from './eventBus.ts';
@@ -166,130 +158,4 @@ export function runSelfCheck6c(): void {
   assert.equal(staffStore.isHired('linh'), false);
   assert.equal(firedLog[1].id, 'linh');
   assert.equal(firedLog[1].reason, 'bi_nem_nhieu_lan');
-
-  // 4. Vật lý bay, nảy nhẹ, đặt ly lên bàn giữ nguyên dữ liệu, kẹt/ra ngoài biên và giới hạn MAX_FLYING/MAX_LANDED
-  const bounds: Box3D = { minX: -5, maxX: 5, minY: 0, maxY: 3.4, minZ: -4, maxZ: 4 };
-  const surfaces: PhysicsSurface[] = [
-    { kind: 'floor', aabb: { minX: -5, maxX: 5, minY: -0.1, maxY: 0, minZ: -4, maxZ: 4 } },
-    { kind: 'table', aabb: { minX: 1, maxX: 2, minY: 0, maxY: 0.77, minZ: -0.5, maxZ: 0.5 } },
-  ];
-
-  // Ly rơi nhẹ lên bàn -> nằm yên với dữ liệu ly nguyên vẹn
-  const world = createProjectileWorld();
-  const savedCup = { ...createEmptyCup(), base: 'matcha' as const, sugar: 50 as const, sealed: true };
-  world.spawn({
-    kind: 'cup',
-    cup: savedCup,
-    pos: { x: 1.5, y: 1.1, z: 0 },
-    vel: { x: 0, y: -1, z: 0 },
-    power: 3,
-  });
-  let landedCup = false;
-  for (let i = 0; i < 30; i++) {
-    const evs = world.step(0.05, surfaces, bounds, [], false);
-    if (evs.some((e) => e.type === 'landed')) landedCup = true;
-  }
-  assert.equal(landedCup, true);
-  assert.equal(world.getLanded().length, 1);
-  assert.deepEqual(world.getLanded()[0].cup, savedCup);
-  assert.deepEqual(world.removeLanded(world.getLanded()[0].id)?.cup, savedCup);
-
-  // Chổi rơi xuống sàn -> nảy nhẹ rồi dừng trên sàn
-  world.spawn({
-    kind: 'broom',
-    pos: { x: -1, y: 1.4, z: 0 },
-    vel: { x: 1, y: 0, z: 0 },
-    power: 4,
-  });
-  let sawBounce = false;
-  let broomLanded = false;
-  for (let i = 0; i < 80; i++) {
-    const evs = world.step(0.05, surfaces, bounds, [], false);
-    const flying = world.getFlying();
-    if (flying[0] && flying[0].vel.y > 0.2) sawBounce = true;
-    if (evs.some((e) => e.type === 'landed')) {
-      broomLanded = true;
-      break;
-    }
-  }
-  assert.equal(sawBounce, true);
-  assert.equal(broomLanded, true);
-
-  // Ngoài biên getShopBounds -> lost reason 'bounds'
-  world.clearAll();
-  world.spawn({
-    kind: 'mop',
-    pos: { x: 6, y: 1, z: 0 },
-    vel: { x: 1, y: 0, z: 0 },
-    power: 5,
-  });
-  const oobEvents = world.step(0.05, surfaces, bounds, [], false);
-  assert.ok(oobEvents.some((e) => e.type === 'lost' && e.reason === 'bounds'));
-
-  // Kẹt quá STUCK_SEC -> lost reason 'stuck'
-  const trappedBox: PhysicsSurface[] = [
-    { kind: 'wall', aabb: { minX: -1, maxX: 1, minY: 0.4, maxY: 0.5, minZ: -1, maxZ: 1 } },
-  ];
-  world.spawn({
-    kind: 'broom',
-    pos: { x: 0, y: 0.592, z: 0 },
-    vel: { x: 0, y: 0, z: 0 },
-    power: 2,
-  });
-  let stuckLost = false;
-  for (let i = 0; i < Math.ceil((STUCK_SEC + 0.5) / 0.1); i++) {
-    const evs = world.step(0.1, trappedBox, bounds, [], false);
-    if (evs.some((e) => e.type === 'lost' && e.reason === 'stuck')) {
-      stuckLost = true;
-      break;
-    }
-  }
-  assert.equal(stuckLost, true);
-
-  // Giới hạn MAX_FLYING và MAX_LANDED
-  world.clearAll();
-  let capacityLost = 0;
-  for (let i = 0; i < MAX_FLYING + 3; i++) {
-    const { lost } = world.spawn({
-      kind: 'cup',
-      cup: createEmptyCup(),
-      pos: { x: 0, y: 2, z: 0 },
-      vel: { x: 0, y: 0, z: 0 },
-      power: 2,
-    });
-    if (lost?.type === 'lost' && lost.reason === 'capacity') capacityLost++;
-  }
-  assert.equal(world.getFlying().length, MAX_FLYING);
-  assert.equal(capacityLost, 3);
-
-  world.clearAll();
-  let evictedCount = 0;
-  for (let i = 0; i < MAX_LANDED + 2; i++) {
-    world.spawn({
-      kind: 'cup',
-      cup: createEmptyCup(),
-      pos: { x: 1.5, y: 0.9, z: 0 },
-      vel: { x: 0, y: -2, z: 0 },
-      power: 3,
-    });
-    for (let s = 0; s < 15; s++) {
-      const evs = world.step(0.05, surfaces, bounds, [], false);
-      evictedCount += evs.filter((e) => e.type === 'evictedLanded').length;
-    }
-  }
-  assert.equal(world.getLanded().length, MAX_LANDED);
-  assert.equal(evictedCount, 2);
-
-  // Hitbox nhân viên: 1 cú ném chỉ tính trúng 1 lần và không cộng dồn nhiều khung hình
-  world.clearAll();
-  world.spawn({ kind: 'broom', pos: { x: 0, y: 0.8, z: -1 }, vel: { x: 0, y: 0, z: 4 }, power: 4 });
-  const staffActors = [
-    { id: 'na', target: 'staff' as const, staffRole: 'cleaner' as const, aabb: { minX: -0.3, maxX: 0.3, minY: 0, maxY: 1.3, minZ: -0.3, maxZ: 0.3 } },
-  ];
-  let staffHits = 0;
-  for (let i = 0; i < 15; i++) {
-    const evs = world.step(0.05, surfaces, bounds, staffActors, true);
-    staffHits += evs.filter((e) => e.type === 'hit' && e.target === 'staff').length;
-  }
-  assert.equal(staffHits, 1);
 }

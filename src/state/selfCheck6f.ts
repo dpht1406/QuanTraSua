@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { createProjectileWorld, type Box3D, type PhysicsSurface } from '../gameplay/projectilePhysics.ts';
 import {
   computeFallDurations,
   computeFallHitbox,
@@ -73,16 +72,4 @@ export function runSelfCheck6f(): void {
   const lieBox = computeFallHitbox(0, 0, 0.28, 1.32, MAX_FALL_TILT, pLie.dropY, { x: 0, z: 1 });
   assert.ok(lieBox.maxY < 0.5);
   assert.ok(lieBox.maxZ > 1.32);
-
-  // 7. Vận tốc lúc va chạm hitVel giữ nguyên hướng bay trước khi nảy
-  const world = createProjectileWorld();
-  const bounds: Box3D = { minX: -5, maxX: 5, minY: 0, maxY: 3.4, minZ: -4, maxZ: 4 };
-  const surfaces: PhysicsSurface[] = [];
-  world.spawn({ kind: 'broom', pos: { x: 0, y: 0.7, z: -0.8 }, vel: { x: 0, y: 0, z: 6 }, power: 6 });
-  const evs = world.step(0.2, surfaces, bounds, [
-    { id: 'na', target: 'staff', staffRole: 'cleaner', aabb: { minX: -0.3, maxX: 0.3, minY: 0, maxY: 1.32, minZ: -0.3, maxZ: 0.3 } },
-  ], false);
-  const hit = evs.find((e) => e.type === 'hit');
-  assert.ok(hit && hit.type === 'hit');
-  assert.ok((hit.hitVel?.z ?? 0) > 0);
 }

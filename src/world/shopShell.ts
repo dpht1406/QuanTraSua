@@ -97,10 +97,10 @@ export function buildShopShell(
   }
 
   const wallBoxes: AabbBox[] = [
-    { minX: -5.2, maxX: 5.2, minZ: -4.2, maxZ: -4.0 },
-    { minX: -5.2, maxX: -5.0, minZ: -4.2, maxZ: 4.2 },
-    { minX: 5.0, maxX: 5.2, minZ: -4.2, maxZ: 4.2 },
-    { minX: -5.2, maxX: 5.2, minZ: 4.0, maxZ: 4.2 },
+    { minX: -5.2, maxX: 5.2, minZ: -4.2, maxZ: -4.0, minY: 0, maxY: 3.4, tag: 'wall' },
+    { minX: -5.2, maxX: -5.0, minZ: -4.2, maxZ: 4.2, minY: 0, maxY: 3.4, tag: 'wall' },
+    { minX: 5.0, maxX: 5.2, minZ: -4.2, maxZ: 4.2, minY: 0, maxY: 3.4, tag: 'wall' },
+    { minX: -5.2, maxX: 5.2, minZ: 4.0, maxZ: 4.2, minY: 0, maxY: 3.4, tag: 'wall' },
   ];
   colliders.push(...wallBoxes);
   wallBoxes.forEach((b) => pushSurface(b, 3.4, 'wall'));

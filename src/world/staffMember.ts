@@ -1,21 +1,20 @@
 import * as THREE from 'three';
+import { STAFF_COLLIDER_HALF_W, STAFF_COLLIDER_HEIGHT } from '../physics/constantsPhysics.ts';
 import { resolveAabbMove, type AabbBox } from '../player/collision.ts';
 import { STAFF_CANDIDATES } from '../state/constants.ts';
 import { pickVariant, type CatVariant } from '../state/catVariants.ts';
-import { CAT_BASE_HEIGHT, CAT_HEAD_RADIUS, CAT_HEAD_SCALE } from '../state/constantsCat.ts';
+import { CAT_BASE_HEIGHT } from '../state/constantsCat.ts';
 import type { StaffMember } from '../state/staff.ts';
-import { createMaterial, markShadow, type MaterialKind } from '../styles/materials.ts';
-import { addOutline } from '../styles/outline.ts';
-import { PALETTE } from '../styles/palette.ts';
-import { animateCat, createCat, type CatRig } from './catModel.ts';
+import { animateCat, createCat } from './catModel.ts';
 import { createFallAnimation, type FallDir } from './fallAnimation.ts';
-import { createHeldMesh } from './heldMeshes.ts';
 import type { Aabb3D } from './shopWorld.ts';
+import { attachStaffUniform } from './staffUniform.ts';
 
 export interface StaffActor {
   member: StaffMember;
   root: THREE.Group;
   readonly hitbox: Aabb3D | null;
+  readonly teleportVersion?: number;
   moveToward(targetX: number, targetZ: number, dt: number): boolean;
   faceToward(targetX: number, targetZ: number): void;
   animateWork(active: boolean, dt: number): void;
@@ -27,66 +26,14 @@ export interface StaffActor {
 
 const STAFF_RADIUS = 0.25;
 const ARRIVE_DIST = 0.34;
-const HITBOX_HALF_W = 0.28;
-const HITBOX_HEIGHT = 1.32;
+const HITBOX_HALF_W = STAFF_COLLIDER_HALF_W;
+const HITBOX_HEIGHT = STAFF_COLLIDER_HEIGHT;
 const STAFF_HEAD_STAR_Y = 1.08;
 
 // Ánh xạ cố định 4 ứng viên nhân viên theo thứ tự STAFF_CANDIDATES sang biến thể mèo
 export function getStaffCatVariant(staffId: string): CatVariant {
   const idx = STAFF_CANDIDATES.findIndex((c) => c.id === staffId);
   return pickVariant(idx >= 0 ? idx : 0);
-}
-
-function addUniformPart(
-  parent: THREE.Object3D,
-  geo: THREE.BufferGeometry,
-  kind: MaterialKind,
-  color: number,
-  x: number,
-  y: number,
-  z: number,
-  outline: number,
-): THREE.Mesh {
-  const mesh = new THREE.Mesh(geo, createMaterial(kind, color));
-  mesh.position.set(x, y, z);
-  addOutline(mesh, outline);
-  parent.add(mesh);
-  return mesh;
-}
-
-// Gắn tạp dề, mũ đồng phục theo vai trò và dụng cụ/ly trên tay mèo
-function attachStaffUniform(rig: CatRig, role: StaffMember['role']): void {
-  const isCleaner = role === 'cleaner';
-  const accentColor = isCleaner ? PALETTE.matchaGreen : PALETTE.pinkBlush;
-  const capColor = isCleaner ? PALETTE.matchaMint : PALETTE.teaBrown;
-  const apronColor = isCleaner ? PALETTE.creamWall : PALETTE.pinkSoft;
-
-  const apron = addUniformPart(rig.body, new THREE.BoxGeometry(0.32, 0.2, 0.03), 'fabric', apronColor, 0, -0.105, 0.208, 0.007);
-  apron.rotation.x = -0.09;
-  const pocket = addUniformPart(rig.body, new THREE.BoxGeometry(0.15, 0.085, 0.018), 'fabric', accentColor, 0, -0.115, 0.226, 0.005);
-  pocket.rotation.x = -0.09;
-  addUniformPart(rig.body, new THREE.CylinderGeometry(0.202, 0.214, 0.04, 14), 'fabric', accentColor, 0, -0.005, 0, 0.006);
-  markShadow(rig.body, true, false);
-
-  const headTopY = CAT_HEAD_RADIUS * CAT_HEAD_SCALE.y;
-  const capCrown = addUniformPart(rig.head, new THREE.CylinderGeometry(0.135, 0.148, 0.07, 14), 'fabric', capColor, 0, headTopY - 0.005, 0.02, 0.007);
-  const capBrim = addUniformPart(rig.head, new THREE.BoxGeometry(0.18, 0.02, 0.1), 'fabric', capColor, 0, headTopY - 0.032, 0.12, 0.006);
-  capBrim.rotation.x = 0.12;
-  const capBadge = addUniformPart(rig.head, new THREE.BoxGeometry(0.065, 0.032, 0.02), 'plastic', accentColor, 0, headTopY - 0.002, 0.155, 0.004);
-  for (const m of [capCrown, capBrim, capBadge]) markShadow(m, true, false);
-
-  if (isCleaner) {
-    const tool = new THREE.Group();
-    tool.rotation.x = 0.2;
-    addUniformPart(tool, new THREE.BoxGeometry(0.04, 0.72, 0.04), 'wood', PALETTE.teaBrown, 0, -0.02, 0, 0.006);
-    addUniformPart(tool, new THREE.BoxGeometry(0.18, 0.06, 0.1), 'fabric', PALETTE.creamTrim, 0, -0.36, 0, 0.007);
-    markShadow(tool, true, false);
-    rig.handAnchorL.add(tool);
-  } else {
-    const cup = createHeldMesh('cup', { castShadow: true, receiveShadow: false });
-    cup.position.set(0, 0.03, 0.02);
-    rig.handAnchorL.add(cup);
-  }
 }
 
 // Tạo nhân vật mèo nhân viên có đồng phục, viền đen và di chuyển tránh va chạm bằng AABB
@@ -114,6 +61,7 @@ export function createStaffActor(
   let detourSign = 1;
   let walkingInMove = false;
   let idledInMove = false;
+  let teleportVersion = 0;
   const fallAnim = createFallAnimation(root, STAFF_HEAD_STAR_Y);
 
   const faceToward = (tx: number, tz: number) => {
@@ -130,6 +78,9 @@ export function createStaffActor(
     get hitbox(): Aabb3D | null {
       if (!root.visible) return null;
       return fallAnim.getHitbox(root.position.x, root.position.z, HITBOX_HALF_W, HITBOX_HEIGHT);
+    },
+    get teleportVersion(): number {
+      return teleportVersion;
     },
     faceToward,
 
@@ -239,6 +190,7 @@ export function createStaffActor(
     },
 
     resetHome(x, z) {
+      teleportVersion++;
       fallAnim.reset();
       walkingInMove = false;
       idledInMove = false;

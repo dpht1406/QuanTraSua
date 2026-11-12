@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CUSTOMER_COLLIDER_HALF_W } from '../physics/constantsPhysics.ts';
 import { CAT_VARIANTS, pickVariant } from '../state/catVariants.ts';
 import { CAT_BASE_HEIGHT } from '../state/constantsCat.ts';
 import { FALL_CUSTOMER_LIE_SEC, FALL_DOWN_SEC, FALL_GETUP_SEC } from '../state/constantsThrow.ts';
@@ -16,6 +17,7 @@ export interface CustomerActor {
   root: THREE.Group;
   readonly hitbox: Aabb3D | null;
   readonly isLeaving: boolean;
+  readonly teleportVersion?: number;
   spawnAt(waypoints: readonly Waypoint[], onArrived: () => void): void;
   leaveAlong(waypoints: readonly Waypoint[], onExited: () => void, options?: { fall?: boolean; hitDir?: FallDir }): void;
   update(dt: number): void;
@@ -24,7 +26,7 @@ export interface CustomerActor {
 }
 
 const WALK_SPEED = 1.9;
-const HITBOX_HALF_W = 0.28;
+const HITBOX_HALF_W = CUSTOMER_COLLIDER_HALF_W;
 const HITBOX_HEIGHT = CAT_BASE_HEIGHT;
 const FALL_HEAD_Y = 1.32;
 
@@ -49,12 +51,13 @@ export function createCustomerActor(): CustomerActor {
   let leaving = false;
   let onDone: (() => void) | null = null;
   let walkTime = 0;
+  let teleportVersion = 0;
   const fallAnim = createFallAnimation(root, FALL_HEAD_Y);
 
   return {
     root,
 
-    // shortcut: khách chỉ có hitbox để ném trúng và không tạo collider đẩy người chơi, nâng cấp khi cần đẩy vật lý
+    // hitbox đồng bộ sang thân kinematic Rapier ở actorBodies (chỉ va chạm projectile tới trước GĐ9c)
     get hitbox(): Aabb3D | null {
       if (!root.visible) return null;
       return fallAnim.getHitbox(root.position.x, root.position.z, HITBOX_HALF_W, HITBOX_HEIGHT);
@@ -64,8 +67,13 @@ export function createCustomerActor(): CustomerActor {
       return leaving;
     },
 
+    get teleportVersion(): number {
+      return teleportVersion;
+    },
+
     spawnAt(waypoints, onArrived) {
       if (waypoints.length === 0) return;
+      teleportVersion++;
       fallAnim.reset();
       root.rotation.set(0, 0, 0);
       root.position.set(waypoints[0].x, 0, waypoints[0].z);
@@ -165,6 +173,7 @@ export function createCustomerActor(): CustomerActor {
     },
 
     hide() {
+      teleportVersion++;
       fallAnim.reset();
       root.rotation.set(0, 0, 0);
       root.position.y = 0;

@@ -5,8 +5,46 @@ import { PALETTE } from '../styles/palette.ts';
 import { makePartBox, makePartCylinder } from './furniturePrimitives.ts';
 import { getWoodTableTexture } from './textures.ts';
 
-// Dựng 1 bộ bàn và 2 ghế gỗ tông nâu trà - hồng pastel
-export function buildTableSet(): THREE.Group {
+export const CHAIR_SEAT_SIZE = { w: 0.4, h: 0.05, d: 0.4, y: 0.45 } as const;
+export const CHAIR_BACK_SIZE = { w: 0.05, h: 0.42, d: 0.4, x: 0.18, y: 0.68 } as const;
+
+// Dựng riêng 1 ghế gỗ mặt đệm hồng (tâm đáy ở y=0, lưng tựa về +X)
+export function buildChair(): THREE.Group {
+  const group = new THREE.Group();
+  group.add(
+    makePartBox(
+      CHAIR_SEAT_SIZE.w,
+      CHAIR_SEAT_SIZE.h,
+      CHAIR_SEAT_SIZE.d,
+      'fabric',
+      PALETTE.pinkSoft,
+      0,
+      CHAIR_SEAT_SIZE.y,
+      0,
+    ),
+  );
+  group.add(
+    makePartBox(
+      CHAIR_BACK_SIZE.w,
+      CHAIR_BACK_SIZE.h,
+      CHAIR_BACK_SIZE.d,
+      'fabric',
+      PALETTE.pinkBlush,
+      CHAIR_BACK_SIZE.x,
+      CHAIR_BACK_SIZE.y,
+      0,
+    ),
+  );
+  for (const dx of [-0.15, 0.15]) {
+    for (const dz of [-0.15, 0.15]) {
+      group.add(makePartBox(0.045, 0.43, 0.045, 'wood', PALETTE.teaDark, dx, 0.215, dz));
+    }
+  }
+  return group;
+}
+
+// Dựng riêng 1 bàn gỗ tông nâu trà (tách ghế để bàn giữ collider tĩnh, ghế động riêng)
+export function buildTable(): THREE.Group {
   const group = new THREE.Group();
   group.add(makePartBox(0.9, 0.06, 0.78, 'wood', PALETTE.teaBrown, 0, 0.74, 0, {
     map: getWoodTableTexture(),
@@ -21,16 +59,18 @@ export function buildTableSet(): THREE.Group {
   for (const [lx, lz] of legOffsets) {
     group.add(makePartBox(0.06, 0.72, 0.06, 'wood', PALETTE.teaDark, lx, 0.36, lz));
   }
+  return group;
+}
+
+// Dựng 1 bộ bàn và 2 ghế gỗ tông nâu trà - hồng pastel
+export function buildTableSet(): THREE.Group {
+  const group = buildTable();
   // 2 ghế đặt hai bên trục X
-  for (const dir of [-1, 1]) {
-    const cx = dir * 0.72;
-    group.add(makePartBox(0.4, 0.05, 0.4, 'fabric', PALETTE.pinkSoft, cx, 0.45, 0));
-    group.add(makePartBox(0.05, 0.42, 0.4, 'fabric', PALETTE.pinkBlush, cx + dir * 0.18, 0.68, 0));
-    for (const dx of [-0.15, 0.15]) {
-      for (const dz of [-0.15, 0.15]) {
-        group.add(makePartBox(0.045, 0.43, 0.045, 'wood', PALETTE.teaDark, cx + dx, 0.215, dz));
-      }
-    }
+  for (const dir of [-1, 1] as const) {
+    const chair = buildChair();
+    chair.position.set(dir * 0.72, 0, 0);
+    chair.rotation.y = dir === 1 ? 0 : Math.PI;
+    group.add(chair);
   }
   return group;
 }

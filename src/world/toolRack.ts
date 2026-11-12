@@ -19,7 +19,7 @@ export interface ToolRackHandlers {
 }
 
 const RACK_POS = { x: 3.6, y: 0, z: -3.97 } as const;
-const RACK_COLLIDER: AabbBox = { minX: 3.18, maxX: 4.02, minZ: -4.02, maxZ: -3.82 };
+const RACK_COLLIDER: AabbBox = { minX: 3.18, maxX: 4.02, minZ: -4.02, maxZ: -3.82, minY: 0, maxY: 1.65, tag: 'rack' };
 const SLOT_X: Record<ToolKind, number> = { broom: -0.19, mop: 0.19 };
 
 function buildSlotGroup(x: number, badgeColor: number): THREE.Group {

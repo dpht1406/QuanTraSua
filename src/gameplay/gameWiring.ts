@@ -19,6 +19,7 @@ export function initPhase6Modules(ctx: GameCtx): Phase6Module {
 
   const reset = () => {
     for (const mod of modules) mod.reset();
+    ctx.furnitureBodies.reset();
   };
 
   ctx.registerTick(update);
