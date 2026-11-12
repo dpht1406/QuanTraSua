@@ -34,6 +34,8 @@ export interface ShopRuntimeDeps {
   stores: ReturnType<typeof initStoresAndSave>;
   onCleanlinessSyncRef: { current: (() => void) | null };
   playerBody: PlayerBody;
+  onQualityChange?: (q: GraphicsQuality) => void;
+  onDimmedChange?: (dimmed: boolean) => void;
 }
 
 // Dựng toàn bộ hệ thống gameplay, UI, nhân viên, tương tác và điều khiển người chơi
@@ -55,7 +57,16 @@ export function setupShopSystems(deps: ShopRuntimeDeps) {
   const heldCupUi = createHeldCupView(app);
 
   let drinkStations: ReturnType<typeof createDrinkStations>;
-  const shopEvents = createShopEventsBridge(app, hud, staffStore, lighting.setDimmed, () => drinkStations?.closePicker());
+  const shopEvents = createShopEventsBridge(
+    app,
+    hud,
+    staffStore,
+    (dimmed) => {
+      lighting.setDimmed(dimmed);
+      deps.onDimmedChange?.(dimmed);
+    },
+    () => drinkStations?.closePicker(),
+  );
 
   let shiftManager: ReturnType<typeof createShiftManager>;
   const orderManager = createOrderManager(
@@ -108,6 +119,7 @@ export function setupShopSystems(deps: ShopRuntimeDeps) {
     storage,
     initialQuality,
     onLowFpsHint: (message) => gameStore.bus.emit('toast:show', { message }),
+    onQualityChange: deps.onQualityChange,
   });
 
   shiftManager = createShiftManager(

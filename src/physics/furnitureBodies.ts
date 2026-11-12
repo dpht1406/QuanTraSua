@@ -1,4 +1,5 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
+import { getWorldBounds } from '../core/worldBounds.ts';
 import { CHAIR_BACK_SIZE, CHAIR_SEAT_SIZE } from '../world/furnitureDecor.ts';
 import type { ChairInstance, ShopWorld } from '../world/shopWorld.ts';
 import { COLLISION_GROUPS } from './collisionGroups.ts';
@@ -47,7 +48,7 @@ function yawToQuat(yaw: number): QuatLike {
 
 // Tạo và quản lý thân động Rapier (mặt ghế + lưng ghế) cho toàn bộ ghế đẩy được trong quán
 export function createFurnitureBodies(physics: PhysicsWorld, world: ShopWorld): FurnitureBodies {
-  const bounds = world.getShopBounds();
+  const bounds = getWorldBounds();
   const entries: ChairEntry[] = [];
   let checkAccum = 0;
 
@@ -151,7 +152,8 @@ export function createFurnitureBodies(physics: PhysicsWorld, world: ShopWorld): 
         const v = entry.body.linvel();
         const speedSq = v.x * v.x + v.y * v.y + v.z * v.z;
         const nearWall =
-          Math.abs(pos.x) > bounds.maxX - 0.2 ||
+          pos.x < bounds.minX + 0.2 ||
+          pos.x > bounds.maxX - 0.2 ||
           pos.z < bounds.minZ + 0.2 ||
           pos.z > bounds.maxZ - 0.2;
         if ((upY < 0.25 || (nearWall && upY < 0.65)) && speedSq < 0.09) {

@@ -44,3 +44,26 @@ export const DEFAULT_LIGHTING_BOUNDS = {
   minZ: -4,
   maxZ: 4,
 } as const;
+
+// Hằng số bầu trời, sương mù, vùng bóng ngoài đường, ánh sáng cửa sổ và mất điện nội thất (GĐ9a)
+export const SKY_BACKGROUND_COLOR = 0xbfe3f7;
+export const SKY_TOP_COLOR = '#89c7f0';
+export const SKY_MID_COLOR = '#cbe7fa';
+export const SKY_HORIZON_COLOR = '#e8f1f8';
+export const SKY_FOG_COLOR = 0xe8f1f8;
+export const STREET_FOG_NEAR = 20;
+export const STREET_FOG_FAR = 52;
+
+export const STREET_SHADOW_PADDING = 1.6;
+export const STREET_SHADOW_MIN_MAX_Y = 9.2;
+export const STREET_SUN_DISTANCE_SCALE = 3.0;
+
+export const WINDOW_FILL_COLOR = 0xfff8ed;
+export const WINDOW_FILL_INTENSITY = 1.65;
+export const WINDOW_FILL_DISTANCE = 7.2;
+export const WINDOW_FILL_DECAY = 2;
+export const WINDOW_FILL_OFFSET = { x: 0, y: 2.15, z: 2.5 } as const;
+
+export const SHOP_OUTAGE_DIM_FACTOR = 0.8;
+export const SHOP_WALL_DIM_INSET = 0.08;
+export const SHOP_DOOR_DAYLIGHT_FEATHER = 0.65;

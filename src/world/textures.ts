@@ -1,12 +1,24 @@
 import * as THREE from 'three';
 import { createSeededRng, tileableNoise2D } from '../state/noise.ts';
+import { paintAsphalt, paintFacade, paintShopSign, paintSidewalk } from './streetTextures.ts';
 
-type TextureKey = 'woodFloor' | 'tile' | 'wall' | 'woodTable';
+type TextureKey =
+  | 'woodFloor'
+  | 'tile'
+  | 'wall'
+  | 'woodTable'
+  | 'asphalt'
+  | 'sidewalk'
+  | 'facade0'
+  | 'facade1'
+  | 'facade2'
+  | 'signOpen'
+  | 'signClosed';
 
 const TEXTURE_ANISOTROPY = 4;
 const textureCache = new Map<TextureKey, THREE.CanvasTexture>();
 
-function createCanvasTexture(
+export function createCanvasTexture(
   size: number,
   repeatX: number,
   repeatY: number,
@@ -191,6 +203,29 @@ export function getWallTexture(): THREE.CanvasTexture | null {
 // Lấy hoặc sinh texture mặt bàn vân gỗ ấm (null trên Node)
 export function getWoodTableTexture(): THREE.CanvasTexture | null {
   return getOrCreate('woodTable', () => createCanvasTexture(256, 1, 1, paintWoodTable));
+}
+
+// Lấy hoặc sinh texture mặt đường nhựa (null trên Node)
+export function getAsphaltTexture(): THREE.CanvasTexture | null {
+  return getOrCreate('asphalt', () => createCanvasTexture(256, 8, 2, paintAsphalt));
+}
+
+// Lấy hoặc sinh texture gạch lát vỉa hè (null trên Node)
+export function getSidewalkTexture(): THREE.CanvasTexture | null {
+  return getOrCreate('sidewalk', () => createCanvasTexture(256, 18, 1, paintSidewalk));
+}
+
+// Lấy hoặc sinh texture mặt tiền dãy nhà theo biến thể 0..2 (null trên Node)
+export function getFacadeTexture(variant: 0 | 1 | 2 = 0): THREE.CanvasTexture | null {
+  const key = (`facade${variant}` as TextureKey);
+  return getOrCreate(key, () => createCanvasTexture(256, 1, 1, (c, s) => paintFacade(c, s, variant)));
+}
+
+// Lấy hoặc sinh texture biển Mở cửa / Đóng cửa treo ở cửa quán (null trên Node)
+export function getShopSignTexture(open: boolean): THREE.CanvasTexture | null {
+  return getOrCreate(open ? 'signOpen' : 'signClosed', () =>
+    createCanvasTexture(256, 1, 1, (c, s) => paintShopSign(c, s, open)),
+  );
 }
 
 // Giải phóng toàn bộ texture đã cache khi hủy cảnh

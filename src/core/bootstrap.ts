@@ -95,6 +95,7 @@ export function initGraphicsUi(
     storage: StorageLike | null | undefined;
     initialQuality: GraphicsQuality;
     onLowFpsHint: (message: string) => void;
+    onQualityChange?: (quality: GraphicsQuality) => void;
   },
 ) {
   const fpsMeter = createFpsMeter(app, {
@@ -107,7 +108,10 @@ export function initGraphicsUi(
     lighting: deps.lighting,
     storage: deps.storage,
     initialQuality: deps.initialQuality,
-    onQualityChange: (q) => fpsMeter.setQuality(q),
+    onQualityChange: (q) => {
+      fpsMeter.setQuality(q);
+      deps.onQualityChange?.(q);
+    },
   });
 
   return { fpsMeter, graphicsSettings };

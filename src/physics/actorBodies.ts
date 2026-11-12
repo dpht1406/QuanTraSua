@@ -2,9 +2,14 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { CustomerActor } from '../world/customer.ts';
 import type { Aabb3D } from '../world/shopWorld.ts';
 import type { StaffActor } from '../world/staffMember.ts';
+import {
+  createActorKinematicBody,
+  makeActorEntry,
+  syncActorEntry,
+  type ActorEntry,
+} from './actorEntry.ts';
 import { COLLISION_GROUPS } from './collisionGroups.ts';
-import { snapshotBodyPose } from './physicsSync.ts';
-import type { BodyTag, PhysicsWorld, Vec3Like } from './physicsTypes.ts';
+import type { PhysicsWorld, Vec3Like } from './physicsTypes.ts';
 
 export interface ActorBodies {
   syncCustomer(customer: CustomerActor): void;
@@ -14,130 +19,6 @@ export interface ActorBodies {
   getStaffBody(staffId: string): RAPIER.RigidBody | null;
   setCustomerKinematic(kinematic: boolean): void;
   dispose(): void;
-}
-
-interface ActorEntry {
-  body: RAPIER.RigidBody;
-  collider: RAPIER.Collider;
-  lastX: number;
-  lastZ: number;
-  lastEpoch: number;
-  lastOx: number;
-  lastOy: number;
-  lastOz: number;
-  lastHx: number;
-  lastHy: number;
-  lastHz: number;
-}
-
-const TELEPORT_DIST = 0.5;
-const EPS = 1e-4;
-
-function hitboxToColliderProps(hitbox: Aabb3D, rootX: number, rootZ: number) {
-  const cx = (hitbox.minX + hitbox.maxX) * 0.5;
-  const cy = (hitbox.minY + hitbox.maxY) * 0.5;
-  const cz = (hitbox.minZ + hitbox.maxZ) * 0.5;
-  return {
-    offset: { x: cx - rootX, y: cy, z: cz - rootZ },
-    halfExtents: {
-      x: Math.max(0.05, (hitbox.maxX - hitbox.minX) * 0.5),
-      y: Math.max(0.05, (hitbox.maxY - hitbox.minY) * 0.5),
-      z: Math.max(0.05, (hitbox.maxZ - hitbox.minZ) * 0.5),
-    },
-  };
-}
-
-function createActorKinematicBody(
-  physics: PhysicsWorld,
-  hitbox: Aabb3D,
-  rootX: number,
-  rootZ: number,
-  collisionGroups: number,
-  tag: BodyTag,
-): RAPIER.RigidBody {
-  const { offset, halfExtents } = hitboxToColliderProps(hitbox, rootX, rootZ);
-  return physics.addDynamicBody({
-    type: 'kinematicPosition',
-    position: { x: rootX, y: 0, z: rootZ },
-    collisionGroups,
-    activeCollisionTypes: RAPIER.ActiveCollisionTypes.DEFAULT,
-    colliders: [
-      {
-        shape: { type: 'box', hx: halfExtents.x, hy: halfExtents.y, hz: halfExtents.z },
-        offset,
-      },
-    ],
-    tag,
-  });
-}
-
-function makeEntry(
-  body: RAPIER.RigidBody,
-  hitbox: Aabb3D,
-  rootX: number,
-  rootZ: number,
-  epoch: number,
-): ActorEntry {
-  const { offset, halfExtents } = hitboxToColliderProps(hitbox, rootX, rootZ);
-  return {
-    body,
-    collider: body.collider(0),
-    lastX: rootX,
-    lastZ: rootZ,
-    lastEpoch: epoch,
-    lastOx: offset.x,
-    lastOy: offset.y,
-    lastOz: offset.z,
-    lastHx: halfExtents.x,
-    lastHy: halfExtents.y,
-    lastHz: halfExtents.z,
-  };
-}
-
-function syncEntry(
-  entry: ActorEntry,
-  hitbox: Aabb3D,
-  rootX: number,
-  rootZ: number,
-  epoch: number,
-): void {
-  const jumped =
-    epoch !== entry.lastEpoch ||
-    Math.hypot(rootX - entry.lastX, rootZ - entry.lastZ) > TELEPORT_DIST;
-  if (jumped) {
-    entry.body.setTranslation({ x: rootX, y: 0, z: rootZ }, true);
-    if (entry.body.isKinematic()) {
-      entry.body.setNextKinematicTranslation({ x: rootX, y: 0, z: rootZ });
-    }
-    snapshotBodyPose(entry.body);
-  } else if (entry.body.isKinematic()) {
-    entry.body.setNextKinematicTranslation({ x: rootX, y: 0, z: rootZ });
-  }
-  entry.lastX = rootX;
-  entry.lastZ = rootZ;
-  entry.lastEpoch = epoch;
-
-  const { offset, halfExtents } = hitboxToColliderProps(hitbox, rootX, rootZ);
-  if (
-    Math.abs(offset.x - entry.lastOx) > EPS ||
-    Math.abs(offset.y - entry.lastOy) > EPS ||
-    Math.abs(offset.z - entry.lastOz) > EPS
-  ) {
-    entry.collider.setTranslationWrtParent(offset);
-    entry.lastOx = offset.x;
-    entry.lastOy = offset.y;
-    entry.lastOz = offset.z;
-  }
-  if (
-    Math.abs(halfExtents.x - entry.lastHx) > EPS ||
-    Math.abs(halfExtents.y - entry.lastHy) > EPS ||
-    Math.abs(halfExtents.z - entry.lastHz) > EPS
-  ) {
-    entry.collider.setHalfExtents(halfExtents);
-    entry.lastHx = halfExtents.x;
-    entry.lastHy = halfExtents.y;
-    entry.lastHz = halfExtents.z;
-  }
 }
 
 // Tạo thân kinematic hitbox cho khách hàng (đóng gói sẵn để GĐ9c chuyển sang thân động khi bị kéo)
@@ -190,10 +71,10 @@ export function createActorBodies(physics: PhysicsWorld): ActorBodies {
     const epoch = customer.teleportVersion ?? 0;
     if (!customerEntry || !customerEntry.body.isValid()) {
       const body = createCustomerBody(physics, hitbox, { x: rx, y: 0, z: rz }, 'customer');
-      customerEntry = makeEntry(body, hitbox, rx, rz, epoch);
+      customerEntry = makeActorEntry(body, hitbox, rx, rz, epoch);
       return;
     }
-    syncEntry(customerEntry, hitbox, rx, rz, epoch);
+    syncActorEntry(customerEntry, hitbox, rx, rz, epoch);
   };
 
   const syncStaff = (actors: readonly StaffActor[]) => {
@@ -222,10 +103,10 @@ export function createActorBodies(physics: PhysicsWorld): ActorBodies {
           id: staffId,
           meta: { role: actor.member.role },
         });
-        staffEntries.set(staffId, makeEntry(body, hitbox, rx, rz, epoch));
+        staffEntries.set(staffId, makeActorEntry(body, hitbox, rx, rz, epoch));
         continue;
       }
-      syncEntry(existing, hitbox, rx, rz, epoch);
+      syncActorEntry(existing, hitbox, rx, rz, epoch);
     }
   };
 

@@ -1,108 +1,63 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
-import { STAFF_CANDIDATES } from '../state/constants.ts';
+import { getWorldBounds } from '../core/worldBounds.ts';
 import * as T from '../state/constantsThrow.ts';
-import type { ThrowObjectKind } from '../state/gameState.ts';
-import type { Cup } from '../state/scoring.ts';
 import type { StaffRole } from '../state/staff.ts';
-import { resolveThrow, type ThrowConsequence, type ThrowTarget } from '../state/throwConsequence.ts';
+import { resolveThrow, type ThrowTarget } from '../state/throwConsequence.ts';
 import { staticTagToThrowTarget } from './buildStaticWorld.ts';
 import { COLLISION_GROUPS, CollisionGroup, groups } from './collisionGroups.ts';
 import * as P from './constantsPhysics.ts';
-import type { BodyTag, ColliderPartDesc, PhysicsWorld, QuatLike, Vec3Like } from './physicsTypes.ts';
+import type { BodyTag, PhysicsWorld, Vec3Like } from './physicsTypes.ts';
+import {
+  buildToolColliders,
+  getMassAndRestitution,
+  isOutOfBounds,
+  resolveStaffInfo,
+  yawPitchToQuat,
+  type LandedProjectileItem,
+  type ProjectileBounds,
+  type ProjectileSim,
+  type ProjectileSimEvent,
+  type ProjectileSimItem,
+  type ProjectileSpawnInput,
+  type ProjectileStepOptions,
+} from './projectileHelpers.ts';
 
-export interface ProjectileBounds {
-  minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number;
-}
-
-export interface ProjectileSpawnInput {
-  kind: ThrowObjectKind; cup?: Cup; pos: Vec3Like; vel: Vec3Like; power: number; yaw?: number;
-}
-
-export interface ProjectileSimItem {
-  id: number; kind: ThrowObjectKind; cup?: Cup; body: RAPIER.RigidBody | null;
-  pos: Vec3Like; vel: Vec3Like; power: number; yaw: number;
-}
-
-export interface LandedProjectileItem {
-  id: number; kind: ThrowObjectKind; cup?: Cup; body: RAPIER.RigidBody | null; pos: Vec3Like; yaw: number;
-}
-
-export type ProjectileSimEvent =
-  | {
-      type: 'hit'; item: ProjectileSimItem; target: ThrowTarget; consequence: ThrowConsequence;
-      impulse: number; staffId?: string; staffRole?: StaffRole; hitVel: Vec3Like;
-    }
-  | { type: 'landed'; item: LandedProjectileItem }
-  | { type: 'lost'; id: number; kind: ThrowObjectKind; reason: 'bounds' | 'stuck' | 'capacity' }
-  | { type: 'evictedLanded'; item: LandedProjectileItem };
-
-export interface ProjectileStepOptions { customerTargetable?: boolean; }
-
-export interface ProjectileSim {
-  computeSafeSpawn(origin: Vec3Like, desired: Vec3Like, kind: ThrowObjectKind): Vec3Like;
-  spawn(input: ProjectileSpawnInput): { item: ProjectileSimItem; lost?: ProjectileSimEvent };
-  step(dt: number, bounds: ProjectileBounds, customerAtCounter: boolean, opts?: ProjectileStepOptions): ProjectileSimEvent[];
-  removeLanded(id: number): LandedProjectileItem | null;
-  clearAll(): { flying: ProjectileSimItem[]; landed: LandedProjectileItem[] };
-  getFlying(): readonly ProjectileSimItem[];
-  getLanded(): readonly LandedProjectileItem[];
-  dispose(): void;
-}
+export type {
+  LandedProjectileItem,
+  ProjectileBounds,
+  ProjectileSim,
+  ProjectileSimEvent,
+  ProjectileSimItem,
+  ProjectileSpawnInput,
+  ProjectileStepOptions,
+};
 
 interface PendingContact {
-  target: ThrowTarget; otherTag: BodyTag; impulse: number; impactSpeed: number; hitVel: Vec3Like;
+  target: ThrowTarget;
+  otherTag: BodyTag;
+  impulse: number;
+  impactSpeed: number;
+  hitVel: Vec3Like;
 }
 
 interface FlyingEntry {
-  item: ProjectileSimItem; body: RAPIER.RigidBody; lastVel: Vec3Like;
-  flightSec: number; stuckSec: number; settleSec: number; hasRestContact: boolean;
-  hitActorIds: Set<string>; emittedTargets: Set<ThrowTarget>; pendingContacts: PendingContact[];
+  item: ProjectileSimItem;
+  body: RAPIER.RigidBody;
+  lastVel: Vec3Like;
+  flightSec: number;
+  stuckSec: number;
+  settleSec: number;
+  hasRestContact: boolean;
+  hitActorIds: Set<string>;
+  emittedTargets: Set<ThrowTarget>;
+  pendingContacts: PendingContact[];
 }
 
-const BOUNDS_MARGIN = 0.08;
 const SETTLE_LIN_SPEED = 0.2;
 const SETTLE_ANG_SPEED = 0.5;
 const SETTLE_HOLD_SEC = 0.15;
 const SPAWN_GROUPS = groups(CollisionGroup.PROJECTILE, CollisionGroup.STATIC | CollisionGroup.CHAIR);
 const LANDED_GROUPS = groups(CollisionGroup.PROJECTILE, CollisionGroup.STATIC | CollisionGroup.CHAIR);
-
-function yawPitchToQuat(yaw: number, pitch: number): QuatLike {
-  const cy = Math.cos(yaw * 0.5), sy = Math.sin(yaw * 0.5);
-  const cp = Math.cos(pitch * 0.5), sp = Math.sin(pitch * 0.5);
-  return { x: cy * sp, y: sy * cp, z: -sy * sp, w: cy * cp };
-}
-
-function getMassAndRestitution(kind: ThrowObjectKind): { mass: number; restitution: number } {
-  if (kind === 'cup') return { mass: P.CUP_MASS, restitution: P.CUP_RESTITUTION };
-  return { mass: kind === 'broom' ? P.BROOM_MASS : P.MOP_MASS, restitution: P.TOOL_RESTITUTION };
-}
-
-function buildToolColliders(kind: 'broom' | 'mop', mass: number): ColliderPartDesc[] {
-  const headShape =
-    kind === 'broom'
-      ? ({ type: 'box', hx: 0.13, hy: 0.08, hz: 0.03 } as const)
-      : ({ type: 'box', hx: 0.145, hy: 0.065, hz: 0.07 } as const);
-  return [
-    { shape: { type: 'capsule', halfHeight: 0.41, radius: 0.025 }, offset: { x: 0, y: 0.16, z: 0 }, mass: mass * 0.45 },
-    { shape: headShape, offset: { x: 0, y: kind === 'broom' ? -0.31 : -0.305, z: 0 }, mass: mass * 0.55 },
-  ];
-}
-
-function isOutOfBounds(pos: Vec3Like, b: ProjectileBounds, margin = BOUNDS_MARGIN): boolean {
-  return (
-    pos.x < b.minX - margin || pos.x > b.maxX + margin ||
-    pos.y < b.minY - margin || pos.y > b.maxY + margin ||
-    pos.z < b.minZ - margin || pos.z > b.maxZ + margin
-  );
-}
-
-function resolveStaffInfo(tag: BodyTag): { staffId?: string; staffRole?: StaffRole } {
-  const staffId = tag.id !== undefined ? String(tag.id) : undefined;
-  const metaRole = tag.meta?.staffRole ?? tag.meta?.role;
-  if (metaRole === 'cleaner' || metaRole === 'barista') return { staffId, staffRole: metaRole };
-  const cand = staffId ? STAFF_CANDIDATES.find((c) => c.id === staffId) : undefined;
-  return { staffId, staffRole: cand?.role };
-}
 
 // Mô phỏng vật lý ném ly, chổi, cây lau bằng thân động Rapier (thay thế projectilePhysics.ts)
 export function createProjectileSim(physics: PhysicsWorld): ProjectileSim {
@@ -144,7 +99,10 @@ export function createProjectileSim(physics: PhysicsWorld): ProjectileSim {
   const promoteToLanded = (entry: FlyingEntry, events: ProjectileSimEvent[]) => {
     while (landed.length >= T.MAX_LANDED) {
       const oldest = landed.shift();
-      if (oldest) { removeBodySafe(oldest.body); events.push({ type: 'evictedLanded', item: oldest }); }
+      if (oldest) {
+        removeBodySafe(oldest.body);
+        events.push({ type: 'evictedLanded', item: oldest });
+      }
     }
     if (entry.body.isValid()) {
       for (let i = 0; i < entry.body.numColliders(); i++) entry.body.collider(i).setCollisionGroups(LANDED_GROUPS);
@@ -152,8 +110,12 @@ export function createProjectileSim(physics: PhysicsWorld): ProjectileSim {
       entry.item.pos = { x: p.x, y: p.y, z: p.z };
     }
     const item: LandedProjectileItem = {
-      id: entry.item.id, kind: entry.item.kind, cup: entry.item.cup,
-      body: entry.body, pos: { ...entry.item.pos }, yaw: entry.item.yaw,
+      id: entry.item.id,
+      kind: entry.item.kind,
+      cup: entry.item.cup,
+      body: entry.body,
+      pos: { ...entry.item.pos },
+      yaw: entry.item.yaw,
     };
     landed.push(item);
     events.push({ type: 'landed', item });
@@ -208,7 +170,7 @@ export function createProjectileSim(physics: PhysicsWorld): ProjectileSim {
       return { item, lost };
     },
 
-    step(dt, bounds, customerAtCounter, opts) {
+    step(dt, bounds = getWorldBounds(), customerAtCounter = false, opts) {
       const events: ProjectileSimEvent[] = [];
       if (dt <= 0) return events;
 
@@ -216,6 +178,9 @@ export function createProjectileSim(physics: PhysicsWorld): ProjectileSim {
         const entry = flying[i], { item, body } = entry;
         entry.flightSec += dt;
         if (!body.isValid()) { detachFlying(i, false); continue; }
+
+        const curPos = body.translation();
+        item.pos = { x: curPos.x, y: curPos.y, z: curPos.z };
 
         let removed = false;
         for (const c of entry.pendingContacts.splice(0)) {

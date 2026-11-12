@@ -2,51 +2,19 @@ import { GREET_WINDOW_SEC, ORDER_PATIENCE_SEC, PICKY_PATIENCE_MULTIPLIER } from 
 import type { EventBus } from '../state/eventBus.ts';
 import { gameStore, type GameEventReason, type GameEvents } from '../state/gameState.ts';
 import { generateOrder, type DrinkOrder } from '../state/menu.ts';
-import { scoreDrink, type Cup, type ScoreResult } from '../state/scoring.ts';
-import { getCustomerGapMultiplier, getCustomerGapRange } from '../state/shift.ts';
+import { scoreDrink, type Cup } from '../state/scoring.ts';
 import type { CustomerActor, Waypoint } from '../world/customer.ts';
 import type { FallDir } from '../world/fallPose.ts';
+import {
+  computeCustomerCooldownSec,
+  formatOrderResult,
+  type ActiveOrderView,
+  type CustomerPhase,
+  type OrderManager,
+  type OrderManagerHooks,
+} from './orderHelpers.ts';
 
-export interface ActiveOrderView {
-  order: DrinkOrder;
-  remainingSec: number;
-  ratio: number;
-  lockedByStaff?: string;
-  isPicky?: boolean;
-}
-
-export interface OrderManagerHooks {
-  getCooldownSpeed?: () => number;
-  consumePicky?: () => boolean;
-  onPickyFinished?: () => void;
-  onGreetWindow?: (remainingSec: number | null) => void;
-  onGreetSuccess?: () => void;
-  onOrderDelivered?: (
-    order: DrinkOrder,
-    score: ScoreResult,
-    payout: number,
-    complaintBonus?: number,
-  ) => void;
-}
-
-export interface OrderManager {
-  update(dt: number): void;
-  deliverCup(cup: Cup): boolean;
-  deliverStaffCup(cup: Cup): boolean;
-  getActiveOrder(): { order: DrinkOrder; elapsedSec: number; remainingSec: number; isPicky: boolean } | null;
-  isOrderLocked(): boolean;
-  lockOrder(staffName: string): boolean;
-  unlockOrder(): boolean;
-  tryGreet(): boolean;
-  setSpawning(enabled: boolean): void;
-  resetForShift(): void;
-  hasActiveCustomer(): boolean;
-  hasCustomerAtCounter(): boolean;
-  forceCustomerLeave(reason: GameEventReason, hitDir?: FallDir): boolean;
-  setComplaintBonusProvider(fn: ((cup: Cup) => number) | null): void;
-}
-
-type CustomerPhase = 'cooldown' | 'walking_in' | 'waiting' | 'walking_out';
+export type { ActiveOrderView, OrderManager, OrderManagerHooks };
 
 const ENTER_WAYPOINTS: readonly Waypoint[] = [
   { x: 0, z: 3.65 },
@@ -104,9 +72,7 @@ export function createOrderManager(
 
   const startCooldown = () => {
     phase = 'cooldown';
-    const gap = getCustomerGapRange(getGameMinutes());
-    const repMult = getCustomerGapMultiplier(gameStore.getState().reputation);
-    cooldownSec = (gap.minSec + Math.random() * (gap.maxSec - gap.minSec)) * repMult;
+    cooldownSec = computeCustomerCooldownSec(getGameMinutes(), gameStore.getState().reputation);
   };
 
   const spawnNextCustomer = () => {
@@ -124,14 +90,6 @@ export function createOrderManager(
       hooks.onGreetWindow?.(GREET_WINDOW_SEC);
       pushOrderView();
     });
-  };
-
-  const formatResult = (score: ScoreResult): { text: string; positive: boolean } => {
-    if (score.payout <= 0) {
-      return { text: 'Sai món! +0đ · 1 sao', positive: false };
-    }
-    const formatted = new Intl.NumberFormat('vi-VN').format(score.payout);
-    return { text: `+${formatted}đ · ${score.stars} sao`, positive: true };
   };
 
   const failActiveOrder = (reason: GameEventReason, resultText: string, knockDown?: { hitDir?: FallDir }): boolean => {
@@ -157,7 +115,7 @@ export function createOrderManager(
     const wasPicky = clearActiveOrder();
     if (wasPicky) hooks.onPickyFinished?.();
     hooks.onOrderDelivered?.(deliveredOrder, score, score.payout, complaintBonus);
-    const res = formatResult(score);
+    const res = formatOrderResult(score);
     onOrderResult(res.text, res.positive);
     customer.leaveAlong(EXIT_WAYPOINTS, startCooldown);
     return true;

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { onHandThrowKey } from '../core/handInput.ts';
+import { getWorldBounds } from '../core/worldBounds.ts';
 import { CUP_HALF_HEIGHT } from '../physics/constantsPhysics.ts';
 import { bindMesh, unbindMesh } from '../physics/physicsSync.ts';
 import { createProjectileSim, type LandedProjectileItem } from '../physics/projectileSim.ts';
@@ -139,7 +140,7 @@ export function initThrowModule(ctx: GameCtx): Phase6Module {
   ctx.eventBus.on('state:changed', (s) => hitTracker.syncDay(s.day));
 
   const stepSim = (dt: number) => {
-    const events = sim.step(dt, ctx.shopWorld.getShopBounds(), ctx.orderManager.hasCustomerAtCounter(), {
+    const events = sim.step(dt, getWorldBounds(), ctx.orderManager.hasCustomerAtCounter(), {
       customerTargetable: !ctx.customer.isLeaving,
     });
     for (const ev of events) {

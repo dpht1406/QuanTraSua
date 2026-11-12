@@ -1,3 +1,4 @@
+import { isInsideShop } from '../core/worldBounds.ts';
 import type { ProjectileSimEvent } from '../physics/projectileSim.ts';
 import {
   DROP_POWER,
@@ -44,7 +45,8 @@ export function applyThrowHitEvent(
     if (next !== prev) ctx.eventBus.emit('reputationChanged', { value: next, delta: next - prev, reason });
   }
 
-  if (res.spawnSpill) {
+  const insideShop = isInsideShop(ev.item.pos);
+  if (res.spawnSpill && insideShop) {
     ctx.cleanliness.spawnFloorStain('spill');
     ctx.cleanlinessView.sync();
   }
@@ -61,5 +63,7 @@ export function applyThrowHitEvent(
 
   if (res.broken || res.binDiscard) removeVisual(ev.item.id);
   if (ev.target === 'customer') ctx.hud.showHint('Khách giận bỏ đi vì bị ném!');
-  else if (res.broken && ev.item.kind === 'cup') ctx.hud.showHint('Ly bị vỡ đổ ra sàn!');
+  else if (res.broken && ev.item.kind === 'cup') {
+    ctx.hud.showHint(insideShop ? 'Ly bị vỡ đổ ra sàn!' : 'Ly bị vỡ ngoài đường!');
+  }
 }

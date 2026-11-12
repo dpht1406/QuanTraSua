@@ -45,6 +45,7 @@ import { runSelfCheck6 } from './selfCheck6.ts';
 import { runSelfCheck7 } from './selfCheck7.ts';
 import { runSelfCheck7b } from './selfCheck7b.ts';
 import { runSelfCheck8 } from './selfCheck8.ts';
+import { runSelfCheckStreet } from './selfCheckStreet.ts';
 import { resolveAabbMove, type AabbBox } from '../player/collision.ts';
 
 // Tự kiểm tra GameState: giá trị mặc định và cập nhật
@@ -246,4 +247,5 @@ runSelfCheck6();
 runSelfCheck7();
 runSelfCheck7b();
 runSelfCheck8();
-console.log('Self-check OK: GameState, EventBus, AABB, Menu, Scoring, Inventory, Shift, Cleanliness, Staff, Phase 5a, Phase 5b, Phase 6, Phase 7, Phase 8');
+runSelfCheckStreet();
+console.log('Self-check OK: GameState, EventBus, AABB, Menu, Scoring, Inventory, Shift, Cleanliness, Staff, Phase 5a, Phase 5b, Phase 6, Phase 7, Phase 8, Street');

@@ -2,7 +2,12 @@ import * as THREE from 'three';
 import { CUSTOMER_COLLIDER_HALF_W } from '../physics/constantsPhysics.ts';
 import { CAT_VARIANTS, pickVariant } from '../state/catVariants.ts';
 import { CAT_BASE_HEIGHT } from '../state/constantsCat.ts';
+import { CUSTOMER_WALK_SPEED } from '../state/constantsStreet.ts';
 import { FALL_CUSTOMER_LIE_SEC, FALL_DOWN_SEC, FALL_GETUP_SEC } from '../state/constantsThrow.ts';
+import {
+  resolveCustomerEntryWaypoints,
+  resolveCustomerExitWaypoints,
+} from '../state/pedestrianMotion.ts';
 import { animateCat, createCat, type CatRig } from './catModel.ts';
 import { nextCustomerVariantIndex } from './customerVariant.ts';
 import { createFallAnimation, type FallDir } from './fallAnimation.ts';
@@ -25,7 +30,7 @@ export interface CustomerActor {
   clearFall(): void;
 }
 
-const WALK_SPEED = 1.9;
+const WALK_SPEED = CUSTOMER_WALK_SPEED;
 const HITBOX_HALF_W = CUSTOMER_COLLIDER_HALF_W;
 const HITBOX_HEIGHT = CAT_BASE_HEIGHT;
 const FALL_HEAD_Y = 1.32;
@@ -72,11 +77,19 @@ export function createCustomerActor(): CustomerActor {
     },
 
     spawnAt(waypoints, onArrived) {
-      if (waypoints.length === 0) return;
+      const resolved = resolveCustomerEntryWaypoints(waypoints);
+      if (resolved.length === 0) return;
       teleportVersion++;
       fallAnim.reset();
       root.rotation.set(0, 0, 0);
-      root.position.set(waypoints[0].x, 0, waypoints[0].z);
+      root.position.set(resolved[0].x, 0, resolved[0].z);
+      if (resolved.length > 1) {
+        const dx = resolved[1].x - resolved[0].x;
+        const dz = resolved[1].z - resolved[0].z;
+        if (dx * dx + dz * dz > 1e-8) {
+          root.rotation.y = Math.atan2(dx, dz);
+        }
+      }
 
       lastVariantIdx = nextCustomerVariantIndex(lastVariantIdx, CAT_VARIANTS.length);
       const variant = pickVariant(lastVariantIdx);
@@ -88,9 +101,9 @@ export function createCustomerActor(): CustomerActor {
       root.add(rig.root);
 
       root.visible = true;
-      path = waypoints;
+      path = resolved;
       pathIdx = 1;
-      walking = waypoints.length > 1;
+      walking = resolved.length > 1;
       leaving = false;
       walkTime = 0;
       onDone = onArrived;
@@ -99,9 +112,13 @@ export function createCustomerActor(): CustomerActor {
     },
 
     leaveAlong(waypoints, onExited, options) {
-      path = waypoints;
+      const resolved = resolveCustomerExitWaypoints(waypoints, {
+        x: root.position.x,
+        z: root.position.z,
+      });
+      path = resolved;
       pathIdx = 0;
-      walking = waypoints.length > 0;
+      walking = resolved.length > 0;
       leaving = true;
       onDone = onExited;
       if (options?.fall) {
@@ -118,14 +135,17 @@ export function createCustomerActor(): CustomerActor {
 
     update(dt) {
       if (!root.visible) return;
+      const safeDt = Number.isFinite(dt) && dt > 0 ? dt : 0;
       // Dừng animateCat khi đang ngã/nằm để fallAnimation điều khiển độc lập
-      if (fallAnim.update(dt)) return;
-      walkTime += dt;
+      if (fallAnim.update(safeDt)) return;
+      walkTime += safeDt;
 
       if (!walking) {
         if (leaving && onDone) {
           root.visible = false;
           leaving = false;
+          path = [];
+          pathIdx = 0;
           const cb = onDone;
           onDone = null;
           cb();
@@ -140,7 +160,7 @@ export function createCustomerActor(): CustomerActor {
       const dx = target.x - root.position.x;
       const dz = target.z - root.position.z;
       const dist = Math.hypot(dx, dz);
-      const step = WALK_SPEED * dt;
+      const step = WALK_SPEED * safeDt;
 
       if (dist <= step) {
         root.position.x = target.x;
@@ -152,6 +172,8 @@ export function createCustomerActor(): CustomerActor {
           if (leaving) {
             root.visible = false;
             leaving = false;
+            path = [];
+            pathIdx = 0;
           } else {
             root.rotation.y = Math.PI; // Quay mặt về phía quầy (-Z)
             if (rig) animateCat(rig, 'idle', walkTime);
@@ -178,6 +200,8 @@ export function createCustomerActor(): CustomerActor {
       root.rotation.set(0, 0, 0);
       root.position.y = 0;
       root.visible = false;
+      path = [];
+      pathIdx = 0;
       walking = false;
       leaving = false;
       onDone = null;

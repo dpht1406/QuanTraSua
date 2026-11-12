@@ -18,7 +18,9 @@ import type { HeldCupView } from '../ui/heldCup.ts';
 import type { HudController } from '../ui/hud.ts';
 import type { CleanlinessView } from '../world/cleanlinessView.ts';
 import type { CustomerActor } from '../world/customer.ts';
+import type { PedestriansController } from '../world/pedestrians.ts';
 import type { ShopWorld } from '../world/shopWorld.ts';
+import type { StreetWorld } from '../world/streetWorld.ts';
 import type { DrinkStationController } from './drinkStations.ts';
 import type { OrderManager } from './orderManager.ts';
 import type { ShiftManager } from './shiftManager.ts';
@@ -40,6 +42,8 @@ export interface GameCtx {
   interaction: InteractionSystem;
   colliders: AabbBox[];
   shopWorld: ShopWorld;
+  street?: StreetWorld;
+  pedestrians?: PedestriansController;
   customer: CustomerActor;
   physics: PhysicsWorld;
   playerBody: PlayerBody;

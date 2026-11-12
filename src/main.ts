@@ -7,6 +7,7 @@ import { setupShopSystems } from './core/bootstrapGame.ts';
 import { startGameLoop } from './core/gameLoop.ts';
 import { createInput } from './core/input.ts';
 import { createSceneSetup } from './core/sceneSetup.ts';
+import { getWorldBounds } from './core/worldBounds.ts';
 import type { GameCtx } from './gameplay/gameCtx.ts';
 import { initPhase6Modules } from './gameplay/gameWiring.ts';
 import { createActorBodies } from './physics/actorBodies.ts';
@@ -19,7 +20,9 @@ import { createPlayerBody } from './physics/playerBody.ts';
 import { gameStore } from './state/gameState.ts';
 import { loadGraphicsQuality } from './state/graphicsQuality.ts';
 import { createCustomerActor } from './world/customer.ts';
+import { createPedestrians } from './world/pedestrians.ts';
 import { createShopWorld } from './world/shopWorld.ts';
+import { createStreet } from './world/streetWorld.ts';
 
 function showPhysicsLoading(app: HTMLElement): HTMLElement {
   const el = document.createElement('div');
@@ -49,7 +52,10 @@ async function bootstrap() {
   const physics = await createPhysicsWorld().finally(() => loadingEl.remove());
 
   const initialQuality = loadGraphicsQuality(getSafeLocalStorage());
-  const { scene, camera, renderer, lighting } = createSceneSetup(app, { initialQuality });
+  const { scene, camera, renderer, lighting } = createSceneSetup(app, {
+    initialQuality,
+    shadowBounds: getWorldBounds(),
+  });
   const input = createInput();
 
   const syncCleanRef: { current: (() => void) | null } = { current: null };
@@ -59,6 +65,9 @@ async function bootstrap() {
     gameStore.bus.emit('toast:show', { message });
   });
   scene.add(world.root);
+
+  const street = createStreet(scene, initialQuality);
+  const pedestrians = createPedestrians(scene, initialQuality);
 
   const customer = createCustomerActor();
   scene.add(customer.root);
@@ -81,6 +90,13 @@ async function bootstrap() {
     stores,
     onCleanlinessSyncRef: syncCleanRef,
     playerBody,
+    onQualityChange: (q) => {
+      street.setQuality(q);
+      pedestrians.setQuality(q);
+    },
+    onDimmedChange: (dimmed) => {
+      street.setDimmed?.(dimmed);
+    },
   });
 
   const loopTicks = new Set<(dt: number) => void>();
@@ -96,6 +112,8 @@ async function bootstrap() {
     interaction: sys.interaction,
     colliders: world.colliders,
     shopWorld: world,
+    street,
+    pedestrians,
     customer,
     physics,
     playerBody,
@@ -126,7 +144,15 @@ async function bootstrap() {
     },
   };
   initPhase6Modules(ctx);
-  buildStaticWorld(physics, world.colliders);
+  const syncShopOpenSign = (open: boolean) => {
+    world.setShopOpen?.(open);
+    street.setShopOpen?.(open);
+  };
+  syncShopOpenSign(gameStore.getState().shiftState === 'open');
+  gameStore.bus.on('shiftOpened', () => syncShopOpenSign(true));
+  gameStore.bus.on('shiftClosed', () => syncShopOpenSign(false));
+
+  buildStaticWorld(physics, world.colliders, { streetColliders: street.colliders });
   physics.world.propagateModifiedBodyPositionsToColliders();
 
   startGameLoop(scene, camera, renderer, (dt) => {
@@ -144,6 +170,8 @@ async function bootstrap() {
       stores.cleanliness.update(dt, shiftState);
       sys.shopEvents.update(dt, shiftState, sys.orderManager.getActiveOrder());
       sys.staffManager.update(dt, shiftState);
+      street.update(dt);
+      pedestrians.update(dt);
       for (const tick of loopTicks) tick(dt);
       actorBodies.sync(customer, sys.staffManager.getActors());
       physics.step(dt);

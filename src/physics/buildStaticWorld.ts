@@ -4,13 +4,14 @@ import type { ThrowTarget } from '../state/throwConsequence.ts';
 import {
   DEFAULT_STATIC_HEIGHT,
   SHOP_CEILING_BOX,
-  SHOP_FLOOR_BOX,
+  WORLD_FLOOR_BOX,
 } from './constantsPhysics.ts';
 import type { BodyKind, PhysicsWorld } from './physicsWorld.ts';
 
 export interface BuildStaticWorldOptions {
   includeFloor?: boolean;
   includeCeiling?: boolean;
+  streetColliders?: readonly AabbBox[];
 }
 
 function addBoxFromAabb(
@@ -48,22 +49,13 @@ export function staticTagToThrowTarget(kind: BodyKind): ThrowTarget | null {
   }
 }
 
-// Dựng toàn bộ vật thể tĩnh Rapier từ cùng danh sách AABB của collision.ts kèm sàn và trần
-export function buildStaticWorld(
+// Dựng các collider tĩnh cho khu đường phố từ cùng danh sách AABB
+export function addStreetColliders(
   physics: PhysicsWorld,
-  colliders: readonly AabbBox[],
-  opts: BuildStaticWorldOptions = {},
+  streetColliders: readonly AabbBox[],
 ): RAPIER.Collider[] {
   const created: RAPIER.Collider[] = [];
-
-  if (opts.includeFloor !== false) {
-    created.push(addBoxFromAabb(physics, SHOP_FLOOR_BOX, 'floor'));
-  }
-  if (opts.includeCeiling !== false) {
-    created.push(addBoxFromAabb(physics, SHOP_CEILING_BOX, 'wall'));
-  }
-
-  for (const box of colliders) {
+  for (const box of streetColliders) {
     created.push(
       addBoxFromAabb(
         physics,
@@ -78,6 +70,33 @@ export function buildStaticWorld(
         box.tag ?? 'wall',
       ),
     );
+  }
+  return created;
+}
+
+// Dựng toàn bộ vật thể tĩnh Rapier từ danh sách AABB của quán + đường phố kèm sàn chung và trần quán
+export function buildStaticWorld(
+  physics: PhysicsWorld,
+  colliders: readonly AabbBox[],
+  opts: BuildStaticWorldOptions = {},
+): RAPIER.Collider[] {
+  const created: RAPIER.Collider[] = [];
+
+  if (opts.includeFloor !== false) {
+    created.push(addBoxFromAabb(physics, WORLD_FLOOR_BOX, 'floor'));
+  }
+  if (opts.includeCeiling !== false) {
+    created.push(addBoxFromAabb(physics, SHOP_CEILING_BOX, 'wall'));
+  }
+
+  created.push(...addStreetColliders(physics, colliders));
+  if (opts.streetColliders && opts.streetColliders.length > 0) {
+    // Khi đã dùng WORLD_FLOOR_BOX liền mạch cho cả quán+phố thì bỏ qua box 'floor' trùng lặp ở đường
+    const streetItems =
+      opts.includeFloor !== false
+        ? opts.streetColliders.filter((b) => b.tag !== 'floor')
+        : opts.streetColliders;
+    created.push(...addStreetColliders(physics, streetItems));
   }
 
   return created;

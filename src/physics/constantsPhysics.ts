@@ -1,3 +1,5 @@
+import { SHOP_INTERIOR_BOUNDS, STREET_BOUNDS } from '../state/constantsStreet.ts';
+
 // Hằng số mô phỏng vật lý Rapier (bước cố định, trọng lực, khối lượng, ma sát, damping)
 export const GRAVITY = -12.0;
 export const FIXED_STEP = 1 / 60;
@@ -14,6 +16,15 @@ export const SHOP_FLOOR_BOX = {
   maxY: 0,
   minZ: -4.2,
   maxZ: 4.2,
+} as const;
+
+export const WORLD_FLOOR_BOX = {
+  minX: Math.min(SHOP_FLOOR_BOX.minX, STREET_BOUNDS.minX - 0.5),
+  maxX: Math.max(SHOP_FLOOR_BOX.maxX, STREET_BOUNDS.maxX + 0.5),
+  minY: -0.25,
+  maxY: 0,
+  minZ: Math.min(SHOP_FLOOR_BOX.minZ, SHOP_INTERIOR_BOUNDS.minZ - 0.2),
+  maxZ: Math.max(SHOP_FLOOR_BOX.maxZ, STREET_BOUNDS.maxZ + 0.5),
 } as const;
 
 export const SHOP_CEILING_BOX = {
